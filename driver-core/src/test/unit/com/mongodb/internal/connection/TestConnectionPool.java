@@ -159,6 +159,10 @@ public class TestConnectionPool implements ConnectionPool {
     }
 
     @Override
+    public void ready() {
+    }
+
+    @Override
     public void close() {
     }
 

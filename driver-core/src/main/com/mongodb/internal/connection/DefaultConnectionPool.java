@@ -38,6 +38,7 @@ import com.mongodb.event.ConnectionPoolClearedEvent;
 import com.mongodb.event.ConnectionPoolClosedEvent;
 import com.mongodb.event.ConnectionPoolCreatedEvent;
 import com.mongodb.event.ConnectionPoolListener;
+import com.mongodb.event.ConnectionPoolReadyEvent;
 import com.mongodb.event.ConnectionReadyEvent;
 import com.mongodb.internal.Timeout;
 import com.mongodb.internal.async.SingleResultCallback;
@@ -62,6 +63,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.IntUnaryOperator;
 
 import static com.mongodb.assertions.Assertions.assertFalse;
 import static com.mongodb.assertions.Assertions.assertNotNull;
@@ -85,7 +87,19 @@ class DefaultConnectionPool implements ConnectionPool {
 
     private final ConcurrentPool<UsageTrackingInternalConnection> pool;
     private final ConnectionPoolSettings settings;
-    private final AtomicInteger generation = new AtomicInteger(0);
+    /**
+     * Represents the {@link State} and the current pool generation,
+     * which is used to lazily clear all connections based on their {@linkplain InternalConnection#getGeneration() generation}.
+     * <p>
+     * The {@linkplain AtomicInteger#get() value} is either negative or positive and not 0:
+     * <ul>
+     *     <li>The sign of the value represents the pool state:
+     *     a negative value represents {@link State#PAUSED}, a positive value represents {@link State#READY}.</li>
+     *     <li>The absolute value may only grow and represents the generation:
+     *     the generation is {@code absoluteValue} - 1, meaning that it starts from 0.</li>
+     * </ul>
+     */
+    private final AtomicInteger stateAndGeneration = new AtomicInteger(1);//VAKOTODO change to -1 to start as PAUSED
     private final AtomicInteger lastPrunedGeneration = new AtomicInteger(0);
     private final ScheduledExecutorService sizeMaintenanceTimer;
     private ExecutorService asyncGetter;
@@ -237,9 +251,18 @@ class DefaultConnectionPool implements ConnectionPool {
 
     @Override
     public void invalidate() {
-        LOGGER.debug("Invalidating the connection pool");
-        generation.incrementAndGet();
-        connectionPoolListener.connectionPoolCleared(new ConnectionPoolClearedEvent(serverId));
+        LOGGER.debug("Invalidating the connection pool and marking it as 'paused'");
+        if (setStateAndUpdateGeneration(State.PAUSED, 1)) {
+            connectionPoolListener.connectionPoolCleared(new ConnectionPoolClearedEvent(serverId));
+        }
+    }
+
+    @Override
+    public void ready() {
+        LOGGER.debug("Marking the connection pool as 'ready'");
+        if (setState(State.READY)) {
+            connectionPoolListener.connectionPoolReady(new ConnectionPoolReadyEvent(serverId));
+        }
     }
 
     @Override
@@ -257,7 +280,29 @@ class DefaultConnectionPool implements ConnectionPool {
 
     @Override
     public int getGeneration() {
-        return generation.get();
+        return Math.abs(stateAndGeneration.get()) - 1;
+    }
+
+    /**
+     * @see #setStateAndUpdateGeneration(State, int)
+     */
+    private boolean setState(final State newState) {
+        return setStateAndUpdateGeneration(newState, 0);
+    }
+
+    /**
+     * @return {@code true} if and only if the state was changed.
+     */
+    private boolean setStateAndUpdateGeneration(final State newState, final int generationUpdate) {
+        State previousState = State.from(stateAndGeneration.getAndAccumulate(generationUpdate, (currentStateAndGeneration, genUpdate) -> {
+            int newStateAndCurrentGeneration = newState.apply(currentStateAndGeneration);
+            return accumulateAbsoluteValue(newStateAndCurrentGeneration, genUpdate);
+        }));
+        return newState != previousState;
+    }
+
+    private static int accumulateAbsoluteValue(final int value, final int update) {
+        return value < 0 ? value - update : value + update;
     }
 
     /**
@@ -308,7 +353,7 @@ class DefaultConnectionPool implements ConnectionPool {
                 @Override
                 public synchronized void run() {
                     try {
-                        int curGeneration = generation.get();
+                        int curGeneration = getGeneration();
                         if (shouldPrune() || curGeneration > lastPrunedGeneration.get()) {
                             if (LOGGER.isDebugEnabled()) {
                                 LOGGER.debug(format("Pruning pooled connections to %s", serverId.getAddress()));
@@ -363,7 +408,7 @@ class DefaultConnectionPool implements ConnectionPool {
     }
 
     private boolean fromPreviousGeneration(final UsageTrackingInternalConnection connection) {
-        return generation.get() > connection.getGeneration();
+        return getGeneration() > connection.getGeneration();
     }
 
     private boolean expired(final long startTime, final long curTime, final long maxTime) {
@@ -654,7 +699,7 @@ class DefaultConnectionPool implements ConnectionPool {
 
         @Override
         public UsageTrackingInternalConnection create() {
-            return new UsageTrackingInternalConnection(internalConnectionFactory.create(serverId), generation.get());
+            return new UsageTrackingInternalConnection(internalConnectionFactory.create(serverId), getGeneration());
         }
 
         @Override
@@ -995,6 +1040,25 @@ class DefaultConnectionPool implements ConnectionPool {
         private T reference;
 
         private MutableReference() {
+        }
+    }
+
+    private enum State {
+        PAUSED(v -> -Math.abs(v)),
+        READY(Math::abs);
+
+        private final IntUnaryOperator changeStateAndGeneration;
+
+        State(final IntUnaryOperator changeStateAndGeneration) {
+            this.changeStateAndGeneration = changeStateAndGeneration;
+        }
+
+        static State from(final int stateAndGeneration) {
+            return stateAndGeneration < 0 ? PAUSED : READY;
+        }
+
+        int apply(final int stateAndGeneration) {
+            return changeStateAndGeneration.applyAsInt(stateAndGeneration);
         }
     }
 }

@@ -21,9 +21,15 @@ import com.mongodb.internal.async.SingleResultCallback;
 import java.io.Closeable;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * An instance of an implementation must be created in the {@linkplain #invalidate() "paused"} state.
+ */
 interface ConnectionPool extends Closeable {
 
-    // Start any maintenance task background tasks associated with the connection pool
+    /**
+     * Start background tasks, e.g., creating connections in the background. This method does not change the state of the pool,
+     * but the actions performed by background tasks may depend on the state.
+     */
     void start();
 
     InternalConnection get();
@@ -35,8 +41,26 @@ interface ConnectionPool extends Closeable {
 
     void getAsync(SingleResultCallback<InternalConnection> callback);
 
+    /**
+     * Mark the pool as "paused", unblock all threads waiting in {@code get...} methods, unless they are blocked
+     * doing an IO operation, lazily clear all connections managed by the pool (this is done via {@code get...} and
+     * {@link InternalConnection#close() check in} methods). In the "paused" state, connections can be created neither in the background
+     * nor via {@code get...} methods.
+     *
+     * @see #ready()
+     */
     void invalidate();
 
+    /**
+     * Mark the pool as "ready", allowing connections to be created in the background and via {@code get...} methods.
+     *
+     * @see #invalidate()
+     */
+    void ready();
+
+    /**
+     * Mark the pool as "closed", release the underlying resources and render the pool unusable.
+     */
     void close();
 
     int getGeneration();
