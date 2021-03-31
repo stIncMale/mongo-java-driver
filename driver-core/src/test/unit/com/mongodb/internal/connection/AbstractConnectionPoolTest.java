@@ -37,12 +37,14 @@ import com.mongodb.event.ConnectionCreatedEvent;
 import com.mongodb.event.ConnectionPoolClearedEvent;
 import com.mongodb.event.ConnectionPoolClosedEvent;
 import com.mongodb.event.ConnectionPoolCreatedEvent;
+import com.mongodb.event.ConnectionPoolReadyEvent;
 import com.mongodb.event.ConnectionReadyEvent;
 import com.mongodb.internal.async.SingleResultCallback;
 import com.mongodb.internal.operation.CommandReadOperation;
 import com.mongodb.lang.Nullable;
 import org.bson.BsonArray;
 import org.bson.BsonDocument;
+import org.bson.BsonInt64;
 import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.codecs.BsonDocumentCodec;
@@ -114,7 +116,7 @@ public abstract class AbstractConnectionPoolTest {
     public void setUp() {
         assumeFalse(skipTest);
         ConnectionPoolSettings.Builder settingsBuilder = ConnectionPoolSettings.builder()
-                .maintenanceFrequency(1, TimeUnit.MILLISECONDS);
+                .maintenanceFrequency(50, TimeUnit.MILLISECONDS);
         BsonDocument poolOptions = definition.getDocument("poolOptions", new BsonDocument());
 
         if (poolOptions.containsKey("maxPoolSize")) {
@@ -199,9 +201,13 @@ public abstract class AbstractConnectionPoolTest {
                 } else if (name.equals("waitForEvent")) {
                     Class<?> eventClass = getEventClass(operation.getString("event").getValue());
                     assumeNotNull(eventClass);
-                    listener.waitForEvent(eventClass, operation.getNumber("count").intValue(), 5, TimeUnit.SECONDS);
+                    long timeoutMillis = operation.getNumber("timeout", new BsonInt64(TimeUnit.SECONDS.toMillis(5)))
+                            .longValue();
+                    listener.waitForEvent(eventClass, operation.getNumber("count").intValue(), timeoutMillis, TimeUnit.MILLISECONDS);
                 } else if (name.equals("clear")) {
                     pool.invalidate();
+                } else if (name.equals("ready")) {
+                    pool.ready();
                 } else if (name.equals("close")) {
                     pool.close();
                 } else if (name.equals("checkOut") || name.equals("checkIn")) {
@@ -246,6 +252,9 @@ public abstract class AbstractConnectionPoolTest {
                     assertEquals(settings, actualEvent.getSettings());
                 } else if (type.equals("ConnectionPoolCleared")) {
                     ConnectionPoolClearedEvent actualEvent = getNextEvent(actualEventsIterator, ConnectionPoolClearedEvent.class);
+                    assertAddressMatch(expectedEvent, actualEvent.getServerId().getAddress());
+                } else if (type.equals("ConnectionPoolReady")) {
+                    ConnectionPoolReadyEvent actualEvent = getNextEvent(actualEventsIterator, ConnectionPoolReadyEvent.class);
                     assertAddressMatch(expectedEvent, actualEvent.getServerId().getAddress());
                 } else if (type.equals("ConnectionPoolClosed")) {
                     ConnectionPoolClosedEvent actualEvent = getNextEvent(actualEventsIterator, ConnectionPoolClosedEvent.class);
@@ -402,6 +411,8 @@ public abstract class AbstractConnectionPoolTest {
             return ConnectionClosedEvent.class;
         } else if (type.equals("ConnectionPoolCleared")) {
             return ConnectionPoolClearedEvent.class;
+        } else if (type.equals("ConnectionPoolReady")) {
+            return ConnectionPoolReadyEvent.class;
         } else if (type.equals("ConnectionReady")) {
             return ConnectionReadyEvent.class;
         } else if (type.equals("ConnectionCheckOutStarted")) {
@@ -531,6 +542,11 @@ public abstract class AbstractConnectionPoolTest {
         @Override
         public void invalidate() {
             pool.invalidate();
+        }
+
+        @Override
+        public void ready() {
+            pool.ready();
         }
 
         @Override
