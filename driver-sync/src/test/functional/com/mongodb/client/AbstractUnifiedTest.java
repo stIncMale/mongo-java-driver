@@ -42,6 +42,7 @@ import com.mongodb.connection.StreamFactoryFactory;
 import com.mongodb.event.CommandEvent;
 import com.mongodb.event.CommandStartedEvent;
 import com.mongodb.event.ConnectionPoolClearedEvent;
+import com.mongodb.event.ConnectionPoolReadyEvent;
 import com.mongodb.internal.connection.TestCommandListener;
 import com.mongodb.internal.connection.TestConnectionPoolListener;
 import com.mongodb.lang.Nullable;
@@ -67,6 +68,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.mongodb.ClusterFixture.getConnectionString;
@@ -480,12 +482,16 @@ public abstract class AbstractUnifiedTest {
                     } else if (operationName.equals("waitForEvent")) {
                         String event = operation.getDocument("arguments").getString("event").getValue();
                         int count = operation.getDocument("arguments").getNumber("count").intValue();
+                        long timeoutMillis = TimeUnit.SECONDS.toMillis(5);
                         switch (event) {
                             case "PoolClearedEvent":
-                                connectionPoolListener.waitForEvent(ConnectionPoolClearedEvent.class, count, 5, SECONDS);
+                                connectionPoolListener.waitForEvent(ConnectionPoolClearedEvent.class, count, timeoutMillis, MILLISECONDS);
+                                break;
+                            case "PoolReadyEvent":
+                                connectionPoolListener.waitForEvent(ConnectionPoolReadyEvent.class, count, timeoutMillis, MILLISECONDS);
                                 break;
                             case "ServerMarkedUnknownEvent":
-                                serverListener.waitForEvent(ServerType.UNKNOWN, count, 5, SECONDS);
+                                serverListener.waitForEvent(ServerType.UNKNOWN, count, timeoutMillis, MILLISECONDS);
                                 break;
                             default:
                                 throw new UnsupportedOperationException("Unsupported event type: " + event);
@@ -497,6 +503,9 @@ public abstract class AbstractUnifiedTest {
                         switch (event) {
                             case "PoolClearedEvent":
                                 actualCount = connectionPoolListener.countEvents(ConnectionPoolClearedEvent.class);
+                                break;
+                            case "PoolReadyEvent":
+                                actualCount = connectionPoolListener.countEvents(ConnectionPoolReadyEvent.class);
                                 break;
                             case "ServerMarkedUnknownEvent":
                                 actualCount = serverListener.countEvents(ServerType.UNKNOWN);
