@@ -18,14 +18,14 @@ package com.mongodb.event;
 
 import com.mongodb.connection.ServerId;
 
-import static com.mongodb.assertions.Assertions.notNull;
+import static com.mongodb.assertions.Assertions.assertNotNull;
 
 /**
- * An event signifying when a connection pool is cleared and paused.
+ * An event signifying when a connection pool is ready.
  *
- * @since 4.0
+ * @since 4.3
  */
-public final class ConnectionPoolClearedEvent {
+public final class ConnectionPoolReadyEvent {
     private final ServerId serverId;
 
     /**
@@ -33,8 +33,8 @@ public final class ConnectionPoolClearedEvent {
      *
      * @param serverId the server id
      */
-    public ConnectionPoolClearedEvent(final ServerId serverId) {
-        this.serverId = notNull("serverId", serverId);
+    public ConnectionPoolReadyEvent(final ServerId serverId) {
+        this.serverId = assertNotNull(serverId);
     }
 
     /**
@@ -48,8 +48,8 @@ public final class ConnectionPoolClearedEvent {
 
     @Override
     public String toString() {
-        return "ConnectionPoolClearedEvent{"
-                       + "serverId=" + serverId
-                       + '}';
+        return "ConnectionPoolReadyEvent{"
+                + "serverId=" + serverId
+                + '}';
     }
 }
