@@ -99,7 +99,7 @@ class DefaultConnectionPool implements ConnectionPool {
      *     the generation is {@code absoluteValue} - 1, meaning that it starts from 0.</li>
      * </ul>
      */
-    private final AtomicInteger stateAndGeneration = new AtomicInteger(1);//VAKOTODO change to -1 to start as PAUSED
+    private final AtomicInteger stateAndGeneration = new AtomicInteger(1); // VAKOTODO change to -1 to start as PAUSED
     private final AtomicInteger lastPrunedGeneration = new AtomicInteger(0);
     private final ScheduledExecutorService sizeMaintenanceTimer;
     private ExecutorService asyncGetter;

@@ -18,17 +18,35 @@ package com.mongodb.client;
 
 import com.mongodb.Block;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.connection.ClusterConnectionMode;
 import com.mongodb.connection.ServerSettings;
+import com.mongodb.diagnostics.logging.Logger;
+import com.mongodb.diagnostics.logging.Loggers;
+import com.mongodb.event.ConnectionPoolClearedEvent;
+import com.mongodb.event.ConnectionPoolListener;
+import com.mongodb.event.ConnectionPoolReadyEvent;
 import com.mongodb.event.ServerDescriptionChangedEvent;
+import com.mongodb.event.ServerHeartbeatFailedEvent;
 import com.mongodb.event.ServerHeartbeatSucceededEvent;
 import com.mongodb.event.ServerListener;
 import com.mongodb.event.ServerMonitorListener;
+import com.mongodb.internal.Timeout;
+import com.mongodb.internal.selector.PrimaryServerSelector;
+import com.mongodb.lang.Nullable;
+import org.bson.BsonArray;
+import org.bson.BsonDocument;
+import org.bson.BsonInt32;
+import org.bson.BsonString;
 import org.bson.Document;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.ClusterFixture.configureFailPoint;
@@ -36,14 +54,24 @@ import static com.mongodb.ClusterFixture.disableFailPoint;
 import static com.mongodb.ClusterFixture.isStandalone;
 import static com.mongodb.ClusterFixture.serverVersionAtLeast;
 import static com.mongodb.client.Fixture.getMongoClientSettingsBuilder;
+import static java.util.Collections.singletonList;
 import static java.util.Collections.synchronizedList;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.bson.BsonDocument.parse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
+/**
+ * See
+ * <a href="https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring-tests.rst">Server Discovery And Monitoring—Test Plan</a>.
+ */
 public class ServerDiscoveryAndMonitoringProseTests {
+    private static final Logger LOGGER = Loggers.getLogger(ServerDiscoveryAndMonitoringProseTests.class.getSimpleName());
+    private static final long TEST_WAIT_TIMEOUT_MILLIS = SECONDS.toMillis(5);
 
     @Test
     @SuppressWarnings("try")
@@ -122,5 +150,109 @@ public class ServerDiscoveryAndMonitoringProseTests {
         } finally {
             disableFailPoint("failCommand");
         }
+    }
+
+    /**
+     * See
+     * <a href="https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring-tests.rst#connection-pool-management">Connection Pool Management</a>.
+     */
+    @Test
+    @SuppressWarnings("try")
+    public void testConnectionPoolManagement() throws InterruptedException {
+        assumeTrue(serverVersionAtLeast(4, 9));
+        BlockingQueue<Object> events = new SynchronousQueue<>(true);
+        ServerMonitorListener serverMonitorListener = new ServerMonitorListener() {
+            @Override
+            public void serverHeartbeatSucceeded(final ServerHeartbeatSucceededEvent event) {
+                events.add(event);
+            }
+
+            @Override
+            public void serverHeartbeatFailed(final ServerHeartbeatFailedEvent event) {
+                events.add(event);
+            }
+        };
+        ConnectionPoolListener connectionPoolListener = new ConnectionPoolListener() {
+            @Override
+            public void connectionPoolReady(final ConnectionPoolReadyEvent event) {
+                events.add(event);
+            }
+
+            @Override
+            public void connectionPoolCleared(ConnectionPoolClearedEvent event) {
+                events.add(event);
+            }
+        };
+        String appName = "SDAMPoolManagementTest";
+        MongoClientSettings clientSettings = getMongoClientSettingsBuilder()
+                .applicationName(appName)
+                .applyToClusterSettings(builder -> builder
+                        .mode(ClusterConnectionMode.SINGLE)
+                        .serverSelector(new PrimaryServerSelector()))
+                .applyToServerSettings(builder -> builder
+                        .heartbeatFrequency(100, TimeUnit.MILLISECONDS)
+                        .addServerMonitorListener(serverMonitorListener))
+                .applyToConnectionPoolSettings(builder -> builder
+                        .addConnectionPoolListener(connectionPoolListener))
+                .build();
+        try (MongoClient client = MongoClients.create(clientSettings)) {
+            assertPoll(events, singletonList(ServerHeartbeatSucceededEvent.class), null);
+            assertPoll(events, singletonList(ConnectionPoolReadyEvent.class), singletonList(ServerHeartbeatSucceededEvent.class));
+            configureFailPoint(new BsonDocument()
+                    .append("configureFailPoint", new BsonString("failCommand"))
+                    .append("mode", new BsonDocument().append("times", new BsonInt32(2)))
+                    .append("data", new BsonDocument()
+                            .append("failCommands", new BsonArray(singletonList(new BsonString("isMaster"))))
+                            .append("errorCode", new BsonInt32(1234))
+                            .append("appName", new BsonString(appName))));
+            assertPoll(events, Arrays.asList(ServerHeartbeatFailedEvent.class, ConnectionPoolClearedEvent.class), null);
+            assertPoll(events, Arrays.asList(ServerHeartbeatSucceededEvent.class, ConnectionPoolReadyEvent.class), null);
+        } finally {
+            disableFailPoint("failCommand");
+        }
+    }
+
+    private static <E> void assertPoll(final BlockingQueue<Object> queue, final Collection<Class<?>> expectedUnorderedElementClasses,
+                                    @Nullable final Collection<Class<?>> unexpectedElementClasses) throws InterruptedException {
+        assertPoll(queue, expectedUnorderedElementClasses, unexpectedElementClasses,
+                Timeout.startNow(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS));
+    }
+
+    /**
+     * @param expectedUnorderedElementClasses {@link Class}es representing {@linkplain java.lang.reflect.Type types} of the {@code queue}
+     *                                        elements that must be retrieved and removed from it at least once. The method returns as soon
+     *                                        as elements of all the specified types are observed.
+     * @param unexpectedUnorderedElementClasses {@link Class}es representing {@linkplain java.lang.reflect.Type types} of the {@code queue}
+     *                                          elements such that are not expected to be encountered.
+     */
+    private static void assertPoll(final BlockingQueue<Object> queue, final Collection<Class<?>> expectedUnorderedElementClasses,
+                                    @Nullable final Collection<Class<?>> unexpectedUnorderedElementClasses, final Timeout timeout)
+            throws InterruptedException {
+        Collection<Class<?>> expectedClasses = new ArrayList<>(expectedUnorderedElementClasses);
+        List<Object> polledExpectedElements = new ArrayList<>();
+        do {
+            Object element;
+            if (timeout.isImmediate()) {
+                element = queue.poll();
+            } else if (timeout.isInfinite()) {
+                element = queue.take();
+            } else {
+                element = queue.poll(timeout.remaining(NANOSECONDS), NANOSECONDS);
+            }
+            if (element != null) {
+                if (LOGGER.isInfoEnabled()) {
+                    LOGGER.info("Polled element " + element.toString());
+                }
+                if (expectedClasses.removeIf(expectedElementClass -> expectedElementClass.isAssignableFrom(element.getClass()))) {
+                    polledExpectedElements.add(element);
+                } else if (unexpectedUnorderedElementClasses != null) {
+                    for (Class<?> unexpectedElementClass : unexpectedUnorderedElementClasses) {
+                        assertFalse("Unexpected element " + element, unexpectedElementClass.isInstance(element));
+                    }
+                }
+            }
+        } while (polledExpectedElements.size() < expectedUnorderedElementClasses.size() && !timeout.expired());
+        assertEquals("Expected elements " + expectedUnorderedElementClasses + ", polled " + polledExpectedElements,
+                expectedUnorderedElementClasses.size(), polledExpectedElements.size());
     }
 }
