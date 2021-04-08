@@ -97,7 +97,7 @@ public class DefaultConnectionPoolTest {
                         .maxWaitTime(50, MILLISECONDS)
                         .build());
         provider.start();
-
+        provider.ready();
         provider.get();
 
         // when
@@ -120,6 +120,7 @@ public class DefaultConnectionPoolTest {
                         .maxConnectionLifeTime(50, MILLISECONDS)
                         .build());
         provider.start();
+        provider.ready();
 
         // when
         provider.get().close();
@@ -140,6 +141,7 @@ public class DefaultConnectionPoolTest {
                         .maxSize(1)
                         .maxConnectionLifeTime(20, MILLISECONDS).build());
         provider.start();
+        provider.ready();
 
         // when
         InternalConnection connection = provider.get();
@@ -160,6 +162,7 @@ public class DefaultConnectionPoolTest {
                         .maintenanceInitialDelay(5, MINUTES)
                         .maxConnectionIdleTime(50, MILLISECONDS).build());
         provider.start();
+        provider.ready();
 
         // when
         provider.get().close();
@@ -181,6 +184,7 @@ public class DefaultConnectionPoolTest {
                         .maintenanceInitialDelay(5, MINUTES)
                         .maxConnectionLifeTime(20, MILLISECONDS).build());
         provider.start();
+        provider.ready();
 
         // when
         provider.get().close();
@@ -202,6 +206,7 @@ public class DefaultConnectionPoolTest {
                         .maintenanceInitialDelay(5, MINUTES)
                         .maxConnectionLifeTime(20, MILLISECONDS).build());
         provider.start();
+        provider.ready();
 
         // when
         provider.get().close();
@@ -224,6 +229,7 @@ public class DefaultConnectionPoolTest {
                         .maxConnectionLifeTime(1, MILLISECONDS)
                         .maintenanceInitialDelay(5, MINUTES)
                         .build());
+        provider.ready();
         provider.get().close();
         provider.start();
 

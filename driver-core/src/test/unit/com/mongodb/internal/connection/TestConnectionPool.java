@@ -21,6 +21,7 @@ import com.mongodb.connection.ConnectionDescription;
 import com.mongodb.connection.ServerDescription;
 import com.mongodb.internal.async.SingleResultCallback;
 import com.mongodb.internal.session.SessionContext;
+import com.mongodb.lang.Nullable;
 import org.bson.ByteBuf;
 import org.bson.codecs.Decoder;
 
@@ -154,8 +155,13 @@ public class TestConnectionPool implements ConnectionPool {
     }
 
     @Override
-    public void invalidate() {
+    public void invalidate(@Nullable final Throwable cause) {
         generation++;
+    }
+
+    @Override
+    public void invalidate() {
+        invalidate(null);
     }
 
     @Override

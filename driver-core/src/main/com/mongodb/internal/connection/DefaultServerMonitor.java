@@ -163,7 +163,7 @@ class DefaultServerMonitor implements ServerMonitor {
                     serverStateListener.stateChanged(new ChangeEvent<>(previousServerDescription, currentServerDescription));
 
                     if (currentServerDescription.getException() != null) {
-                        connectionPool.invalidate();
+                        connectionPool.invalidate(currentServerDescription.getException());
                     }
 
                     if (((connection == null || shouldStreamResponses(currentServerDescription))

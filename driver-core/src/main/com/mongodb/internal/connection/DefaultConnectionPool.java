@@ -16,6 +16,7 @@
 
 package com.mongodb.internal.connection;
 
+import com.mongodb.MongoConnectionPoolClearedException;
 import com.mongodb.MongoInterruptedException;
 import com.mongodb.MongoTimeoutException;
 import com.mongodb.annotations.NotThreadSafe;
@@ -63,7 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.IntUnaryOperator;
+import java.util.concurrent.locks.StampedLock;
 
 import static com.mongodb.assertions.Assertions.assertFalse;
 import static com.mongodb.assertions.Assertions.assertNotNull;
@@ -87,19 +88,6 @@ class DefaultConnectionPool implements ConnectionPool {
 
     private final ConcurrentPool<UsageTrackingInternalConnection> pool;
     private final ConnectionPoolSettings settings;
-    /**
-     * Represents the {@link State} and the current pool generation,
-     * which is used to lazily clear all connections based on their {@linkplain InternalConnection#getGeneration() generation}.
-     * <p>
-     * The {@linkplain AtomicInteger#get() value} is either negative or positive and not 0:
-     * <ul>
-     *     <li>The sign of the value represents the pool state:
-     *     a negative value represents {@link State#PAUSED}, a positive value represents {@link State#READY}.</li>
-     *     <li>The absolute value may only grow and represents the generation:
-     *     the generation is {@code absoluteValue} - 1, meaning that it starts from 0.</li>
-     * </ul>
-     */
-    private final AtomicInteger stateAndGeneration = new AtomicInteger(1); // VAKOTODO change to -1 to start as PAUSED
     private final AtomicInteger lastPrunedGeneration = new AtomicInteger(0);
     private final ScheduledExecutorService sizeMaintenanceTimer;
     private ExecutorService asyncGetter;
@@ -108,6 +96,7 @@ class DefaultConnectionPool implements ConnectionPool {
     private final ServerId serverId;
     private volatile boolean closed;
     private final OpenConcurrencyLimiter openConcurrencyLimiter;
+    private final StateAndGeneration stateAndGeneration;
 
     DefaultConnectionPool(final ServerId serverId, final InternalConnectionFactory internalConnectionFactory,
                           final ConnectionPoolSettings settings) {
@@ -121,6 +110,7 @@ class DefaultConnectionPool implements ConnectionPool {
         sizeMaintenanceTimer = createMaintenanceTimer();
         connectionPoolCreated(connectionPoolListener, serverId, settings);
         openConcurrencyLimiter = new OpenConcurrencyLimiter(MAX_CONNECTING);
+        stateAndGeneration = new StateAndGeneration();
     }
 
     @Override
@@ -250,17 +240,22 @@ class DefaultConnectionPool implements ConnectionPool {
     }
 
     @Override
-    public void invalidate() {
+    public void invalidate(@Nullable final Throwable cause) {
         LOGGER.debug("Invalidating the connection pool and marking it as 'paused'");
-        if (setStateAndUpdateGeneration(State.PAUSED, 1)) {
+        if (stateAndGeneration.pauseAndIncrementGeneration(cause)) {
             connectionPoolListener.connectionPoolCleared(new ConnectionPoolClearedEvent(serverId));
         }
     }
 
     @Override
+    public void invalidate() {
+        invalidate(null);
+    }
+
+    @Override
     public void ready() {
         LOGGER.debug("Marking the connection pool as 'ready'");
-        if (setState(State.READY)) {
+        if (stateAndGeneration.unpause()) {
             connectionPoolListener.connectionPoolReady(new ConnectionPoolReadyEvent(serverId));
         }
     }
@@ -280,29 +275,7 @@ class DefaultConnectionPool implements ConnectionPool {
 
     @Override
     public int getGeneration() {
-        return Math.abs(stateAndGeneration.get()) - 1;
-    }
-
-    /**
-     * @see #setStateAndUpdateGeneration(State, int)
-     */
-    private boolean setState(final State newState) {
-        return setStateAndUpdateGeneration(newState, 0);
-    }
-
-    /**
-     * @return {@code true} if and only if the state was changed.
-     */
-    private boolean setStateAndUpdateGeneration(final State newState, final int generationUpdate) {
-        State previousState = State.from(stateAndGeneration.getAndAccumulate(generationUpdate, (currentStateAndGeneration, genUpdate) -> {
-            int newStateAndCurrentGeneration = newState.apply(currentStateAndGeneration);
-            return accumulateAbsoluteValue(newStateAndCurrentGeneration, genUpdate);
-        }));
-        return newState != previousState;
-    }
-
-    private static int accumulateAbsoluteValue(final int value, final int update) {
-        return value < 0 ? value - update : value + update;
+        return stateAndGeneration.generation();
     }
 
     /**
@@ -699,7 +672,8 @@ class DefaultConnectionPool implements ConnectionPool {
 
         @Override
         public UsageTrackingInternalConnection create() {
-            return new UsageTrackingInternalConnection(internalConnectionFactory.create(serverId), getGeneration());
+            int generation = stateAndGeneration.generationOrThrowIfPaused();
+            return new UsageTrackingInternalConnection(internalConnectionFactory.create(serverId), generation);
         }
 
         @Override
@@ -1043,22 +1017,64 @@ class DefaultConnectionPool implements ConnectionPool {
         }
     }
 
-    private enum State {
-        PAUSED(v -> -Math.abs(v)),
-        READY(Math::abs);
+    @ThreadSafe
+    private final class StateAndGeneration {
+        private final StampedLock lock;
+        private boolean paused;
+        private int generation;
+        @Nullable
+        private Throwable cause;
 
-        private final IntUnaryOperator changeStateAndGeneration;
-
-        State(final IntUnaryOperator changeStateAndGeneration) {
-            this.changeStateAndGeneration = changeStateAndGeneration;
+        StateAndGeneration() {
+            lock = new StampedLock();
+            paused = false; // VAKOTODO true
+            generation = 0;
         }
 
-        static State from(final int stateAndGeneration) {
-            return stateAndGeneration < 0 ? PAUSED : READY;
+        int generation() {
+            long stamp = lock.readLock();
+            try {
+                return generation;
+            } finally {
+                lock.unlockRead(stamp);
+            }
         }
 
-        int apply(final int stateAndGeneration) {
-            return changeStateAndGeneration.applyAsInt(stateAndGeneration);
+        int generationOrThrowIfPaused() throws MongoConnectionPoolClearedException {
+            long stamp = lock.readLock();
+            try {
+                if (paused) {
+                    throw new MongoConnectionPoolClearedException(serverId, cause);
+                }
+                return generation;
+            } finally {
+                lock.unlockRead(stamp);
+            }
+        }
+
+        boolean pauseAndIncrementGeneration(@Nullable final Throwable cause) {
+            long stamp = lock.writeLock();
+            try {
+                generation++;
+                boolean result = !this.paused;
+                this.paused = true;
+                this.cause = cause;
+                return result;
+            } finally {
+                lock.unlockWrite(stamp);
+            }
+        }
+
+        boolean unpause() {
+            long stamp = lock.writeLock();
+            try {
+                boolean result = this.paused;
+                this.paused = false;
+                this.cause = null;
+                return result;
+            } finally {
+                lock.unlockWrite(stamp);
+            }
         }
     }
 }

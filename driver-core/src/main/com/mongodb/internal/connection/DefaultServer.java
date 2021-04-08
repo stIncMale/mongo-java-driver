@@ -95,7 +95,7 @@ class DefaultServer implements ClusterableServer {
         try {
             return connectionFactory.create(connectionPool.get(), new DefaultServerProtocolExecutor(), clusterConnectionMode);
         } catch (MongoSecurityException e) {
-            connectionPool.invalidate();
+            connectionPool.invalidate(e);
             throw e;
         } catch (MongoSocketException e) {
             invalidate(ConnectionState.BEFORE_HANDSHAKE, e, connectionPool.getGeneration(), description.getMaxWireVersion());
@@ -110,7 +110,7 @@ class DefaultServer implements ClusterableServer {
             @Override
             public void onResult(final InternalConnection result, final Throwable t) {
                 if (t instanceof MongoSecurityException) {
-                    connectionPool.invalidate();
+                    connectionPool.invalidate(t);
                 } else if (t instanceof MongoSocketException) {
                     invalidate(ConnectionState.BEFORE_HANDSHAKE, t, connectionPool.getGeneration(), description.getMaxWireVersion());
                 }
@@ -153,7 +153,7 @@ class DefaultServer implements ClusterableServer {
                     && (!(t instanceof MongoSocketReadTimeoutException) || connectionState == BEFORE_HANDSHAKE)) {
                 serverStateListener.stateChanged(new ChangeEvent<>(description, ServerDescription.builder()
                         .state(CONNECTING).address(serverId.getAddress()).exception(t).build()));
-                connectionPool.invalidate();
+                connectionPool.invalidate(t);
                 serverMonitor.cancelCurrentCheck();
             } else if (t instanceof MongoNotPrimaryException || t instanceof MongoNodeIsRecoveringException) {
                 if (isStale(((MongoCommandException) t))) {

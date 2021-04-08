@@ -540,6 +540,11 @@ public abstract class AbstractConnectionPoolTest {
         }
 
         @Override
+        public void invalidate(@Nullable final Throwable cause) {
+            pool.invalidate(cause);
+        }
+
+        @Override
         public void invalidate() {
             pool.invalidate();
         }

@@ -17,6 +17,7 @@
 package com.mongodb.internal.operation;
 
 import com.mongodb.MongoChangeStreamException;
+import com.mongodb.MongoConnectionPoolClearedException;
 import com.mongodb.MongoCursorNotFoundException;
 import com.mongodb.MongoException;
 import com.mongodb.MongoInterruptedException;
@@ -37,7 +38,7 @@ final class ChangeStreamBatchCursorHelper {
         if (!(t instanceof MongoException) || t instanceof MongoChangeStreamException || t instanceof MongoInterruptedException) {
             return false;
         } else if (t instanceof MongoNotPrimaryException || t instanceof MongoCursorNotFoundException
-                || t instanceof MongoSocketException) {
+                || t instanceof MongoSocketException || t instanceof MongoConnectionPoolClearedException) {
             return true;
         } else if (maxWireVersion >= FOUR_DOT_FOUR_WIRE_VERSION) {
             return ((MongoException) t).getErrorLabels().contains(RESUMABLE_CHANGE_STREAM_ERROR_LABEL);

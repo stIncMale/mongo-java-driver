@@ -16,7 +16,10 @@
 
 package com.mongodb.internal.connection;
 
+import com.mongodb.MongoConnectionPoolClearedException;
+import com.mongodb.connection.ConnectionPoolSettings;
 import com.mongodb.internal.async.SingleResultCallback;
+import com.mongodb.lang.Nullable;
 
 import java.io.Closeable;
 import java.util.concurrent.TimeUnit;
@@ -32,13 +35,20 @@ interface ConnectionPool extends Closeable {
      */
     void start();
 
-    InternalConnection get();
+    /**
+     * Is equivalent to {@link #get(long, TimeUnit)} called with {@link ConnectionPoolSettings#getMaxWaitTime(TimeUnit)}.
+     */
+    InternalConnection get() throws MongoConnectionPoolClearedException;
 
     /**
      * @param timeout See {@link com.mongodb.internal.Timeout#startNow(long, TimeUnit)}.
+     * @throws MongoConnectionPoolClearedException If detects that the pool is "paused".
      */
-    InternalConnection get(long timeout, TimeUnit timeUnit);
+    InternalConnection get(long timeout, TimeUnit timeUnit) throws MongoConnectionPoolClearedException;
 
+    /**
+     * Completes the {@code callback} with a {@link MongoConnectionPoolClearedException} if detects that the pool is "paused".
+     */
     void getAsync(SingleResultCallback<InternalConnection> callback);
 
     /**
@@ -49,12 +59,17 @@ interface ConnectionPool extends Closeable {
      *
      * @see #ready()
      */
+    void invalidate(@Nullable Throwable cause);
+
+    /**
+     * Is equivalent to {@link #invalidate(Throwable)} called with {@code null}.
+     */
     void invalidate();
 
     /**
      * Mark the pool as "ready", allowing connections to be created in the background and via {@code get...} methods.
      *
-     * @see #invalidate()
+     * @see #invalidate(Throwable)
      */
     void ready();
 

@@ -19,6 +19,7 @@ package com.mongodb.internal.operation;
 import com.mongodb.Function;
 import com.mongodb.MongoClientException;
 import com.mongodb.MongoCommandException;
+import com.mongodb.MongoConnectionPoolClearedException;
 import com.mongodb.MongoException;
 import com.mongodb.MongoNodeIsRecoveringException;
 import com.mongodb.MongoNotPrimaryException;
@@ -770,7 +771,8 @@ final class CommandOperationHelper {
             return false;
         }
 
-        if (t instanceof MongoSocketException || t instanceof MongoNotPrimaryException || t instanceof MongoNodeIsRecoveringException) {
+        if (t instanceof MongoSocketException || t instanceof MongoNotPrimaryException || t instanceof MongoNodeIsRecoveringException
+                || t instanceof MongoConnectionPoolClearedException) {
             return true;
         }
         return RETRYABLE_ERROR_CODES.contains(((MongoException) t).getCode());
