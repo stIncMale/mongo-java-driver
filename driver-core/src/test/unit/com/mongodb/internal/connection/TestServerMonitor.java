@@ -17,21 +17,22 @@
 package com.mongodb.internal.connection;
 
 import com.mongodb.connection.ServerDescription;
-import com.mongodb.connection.ServerId;
 
-import static com.mongodb.connection.ServerConnectionState.CONNECTING;
-import static com.mongodb.connection.ServerType.UNKNOWN;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static com.mongodb.assertions.Assertions.assertNotNull;
+import static com.mongodb.assertions.Assertions.assertTrue;
 
 class TestServerMonitor implements ServerMonitor {
-    private ServerDescription currentDescription;
-    private ChangeListener<ServerDescription> serverStateListener;
+    private final AtomicReference<SdamServerDescriptionManager> sdam;
 
-    TestServerMonitor(final ServerId serverId) {
-        currentDescription = ServerDescription.builder().type(UNKNOWN).state(CONNECTING).address(serverId.getAddress()).build();
+    TestServerMonitor() {
+        sdam = new AtomicReference<>();
     }
 
     @Override
-    public void start() {
+    public void start(final SdamServerDescriptionManager sdam) {
+        assertTrue(this.sdam.compareAndSet(null, assertNotNull(sdam)));
     }
 
     @Override
@@ -46,13 +47,7 @@ class TestServerMonitor implements ServerMonitor {
     public void cancelCurrentCheck() {
     }
 
-    public void setServerStateListener(final ChangeListener<ServerDescription> serverStateListener) {
-        this.serverStateListener = serverStateListener;
-    }
-
-
-    public void sendNotification(final ServerDescription serverDescription) {
-        serverStateListener.stateChanged(new ChangeEvent<ServerDescription>(currentDescription, serverDescription));
-        currentDescription = serverDescription;
+    public void updateServerDescription(final ServerDescription serverDescription) {
+        assertNotNull(sdam.get()).update(serverDescription);
     }
 }

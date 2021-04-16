@@ -179,7 +179,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
             }
 
             @Override
-            public void connectionPoolCleared(ConnectionPoolClearedEvent event) {
+            public void connectionPoolCleared(final ConnectionPoolClearedEvent event) {
                 events.add(event);
             }
         };
@@ -195,6 +195,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
                 .applyToConnectionPoolSettings(builder -> builder
                         .addConnectionPoolListener(connectionPoolListener))
                 .build();
+        // noinspection unused
         try (MongoClient client = MongoClients.create(clientSettings)) {
             assertPoll(events, singletonList(ServerHeartbeatSucceededEvent.class), null);
             assertPoll(events, singletonList(ConnectionPoolReadyEvent.class), singletonList(ServerHeartbeatSucceededEvent.class));
@@ -212,7 +213,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
         }
     }
 
-    private static <E> void assertPoll(final BlockingQueue<Object> queue, final Collection<Class<?>> expectedUnorderedElementClasses,
+    private static void assertPoll(final BlockingQueue<Object> queue, final Collection<Class<?>> expectedUnorderedElementClasses,
                                     @Nullable final Collection<Class<?>> unexpectedElementClasses) throws InterruptedException {
         assertPoll(queue, expectedUnorderedElementClasses, unexpectedElementClasses,
                 Timeout.startNow(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS));

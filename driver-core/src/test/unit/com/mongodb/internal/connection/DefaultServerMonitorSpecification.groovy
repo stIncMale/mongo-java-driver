@@ -45,10 +45,31 @@ class DefaultServerMonitorSpecification extends Specification {
     def 'close should not send a sendStateChangedEvent'() {
         given:
         def stateChanged = false
-        def changeListener = new ChangeListener<ServerDescription>() {
+        def sdam = new SdamServerDescriptionManager() {
             @Override
-            void stateChanged(final ChangeEvent<ServerDescription> event) {
+            void update(final ServerDescription candidateDescription) {
+                assert candidateDescription != null
                 stateChanged = true
+            }
+
+            @Override
+            void handleExceptionBeforeHandshake(final SdamServerDescriptionManager.SdamIssue sdamIssue) {
+                throw new UnsupportedOperationException()
+            }
+
+            @Override
+            void handleExceptionAfterHandshake(final SdamServerDescriptionManager.SdamIssue sdamIssue) {
+                throw new UnsupportedOperationException()
+            }
+
+            @Override
+            SdamServerDescriptionManager.SdamIssue.Context context() {
+                throw new UnsupportedOperationException()
+            }
+
+            @Override
+            SdamServerDescriptionManager.SdamIssue.Context context(final InternalConnection connection) {
+                throw new UnsupportedOperationException()
             }
         }
         def internalConnectionFactory = Mock(InternalConnectionFactory) {
@@ -59,8 +80,8 @@ class DefaultServerMonitorSpecification extends Specification {
             }
         }
         monitor = new DefaultServerMonitor(new ServerId(new ClusterId(), new ServerAddress()), ServerSettings.builder().build(),
-                new ClusterClock(), changeListener, internalConnectionFactory, new TestConnectionPool(), null)
-        monitor.start()
+                new ClusterClock(), internalConnectionFactory, null)
+        monitor.start(sdam)
 
         when:
         monitor.close()
@@ -72,12 +93,6 @@ class DefaultServerMonitorSpecification extends Specification {
 
     def 'should send started and succeeded heartbeat events'() {
         given:
-        def changeListener = new ChangeListener<ServerDescription>() {
-            @Override
-            void stateChanged(final ChangeEvent<ServerDescription> event) {
-            }
-        }
-
         def latch = new CountDownLatch(1)
         def startedEvent
         def succeededEvent
@@ -150,10 +165,10 @@ class DefaultServerMonitorSpecification extends Specification {
         }
         monitor = new DefaultServerMonitor(new ServerId(new ClusterId(), new ServerAddress()),
                 ServerSettings.builder().heartbeatFrequency(1, TimeUnit.SECONDS).addServerMonitorListener(serverMonitorListener).build(),
-                new ClusterClock(), changeListener, internalConnectionFactory, new TestConnectionPool(), null)
+                new ClusterClock(), internalConnectionFactory, null)
 
         when:
-        monitor.start()
+        monitor.start(Mock(SdamServerDescriptionManager))
         latch.await(30, TimeUnit.SECONDS)
 
         then:
@@ -169,12 +184,6 @@ class DefaultServerMonitorSpecification extends Specification {
 
     def 'should send started and failed heartbeat events'() {
         given:
-        def changeListener = new ChangeListener<ServerDescription>() {
-            @Override
-            void stateChanged(final ChangeEvent<ServerDescription> event) {
-            }
-        }
-
         def latch = new CountDownLatch(1)
         def startedEvent
         def succeededEvent
@@ -237,10 +246,10 @@ class DefaultServerMonitorSpecification extends Specification {
         }
         monitor = new DefaultServerMonitor(new ServerId(new ClusterId(), new ServerAddress()),
                 ServerSettings.builder().heartbeatFrequency(1, TimeUnit.SECONDS).addServerMonitorListener(serverMonitorListener).build(),
-                new ClusterClock(), changeListener, internalConnectionFactory, new TestConnectionPool(), null)
+                new ClusterClock(), internalConnectionFactory, null)
 
         when:
-        monitor.start()
+        monitor.start(Mock(SdamServerDescriptionManager))
         latch.await(30, TimeUnit.SECONDS)
 
         then:

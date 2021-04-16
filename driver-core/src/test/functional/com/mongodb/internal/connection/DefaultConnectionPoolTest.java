@@ -96,7 +96,7 @@ public class DefaultConnectionPoolTest {
                         .maxSize(1)
                         .maxWaitTime(50, MILLISECONDS)
                         .build());
-        provider.start();
+        provider.start(mock(SdamServerDescriptionManager.class));
         provider.ready();
         provider.get();
 
@@ -119,7 +119,7 @@ public class DefaultConnectionPoolTest {
                         .maintenanceInitialDelay(5, MINUTES)
                         .maxConnectionLifeTime(50, MILLISECONDS)
                         .build());
-        provider.start();
+        provider.start(mock(SdamServerDescriptionManager.class));
         provider.ready();
 
         // when
@@ -140,7 +140,7 @@ public class DefaultConnectionPoolTest {
                 ConnectionPoolSettings.builder()
                         .maxSize(1)
                         .maxConnectionLifeTime(20, MILLISECONDS).build());
-        provider.start();
+        provider.start(mock(SdamServerDescriptionManager.class));
         provider.ready();
 
         // when
@@ -161,7 +161,7 @@ public class DefaultConnectionPoolTest {
                         .maxSize(1)
                         .maintenanceInitialDelay(5, MINUTES)
                         .maxConnectionIdleTime(50, MILLISECONDS).build());
-        provider.start();
+        provider.start(mock(SdamServerDescriptionManager.class));
         provider.ready();
 
         // when
@@ -183,7 +183,7 @@ public class DefaultConnectionPoolTest {
                         .maxSize(1)
                         .maintenanceInitialDelay(5, MINUTES)
                         .maxConnectionLifeTime(20, MILLISECONDS).build());
-        provider.start();
+        provider.start(mock(SdamServerDescriptionManager.class));
         provider.ready();
 
         // when
@@ -205,7 +205,7 @@ public class DefaultConnectionPoolTest {
                         .maxSize(1)
                         .maintenanceInitialDelay(5, MINUTES)
                         .maxConnectionLifeTime(20, MILLISECONDS).build());
-        provider.start();
+        provider.start(mock(SdamServerDescriptionManager.class));
         provider.ready();
 
         // when
@@ -231,7 +231,7 @@ public class DefaultConnectionPoolTest {
                         .build());
         provider.ready();
         provider.get().close();
-        provider.start();
+        provider.start(mock(SdamServerDescriptionManager.class));
 
 
         // when

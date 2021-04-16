@@ -42,7 +42,7 @@ public class TestConnectionPool implements ConnectionPool {
     }
 
     @Override
-    public void start() {
+    public void start(final SdamServerDescriptionManager sdam) {
     }
 
     @Override

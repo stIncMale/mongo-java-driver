@@ -79,6 +79,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeFalse;
 import static org.junit.Assume.assumeNotNull;
+import static org.mockito.Mockito.mock;
 
 // Implementation of
 // https://github.com/mongodb/specifications/blob/master/source/connection-monitoring-and-pooling/connection-monitoring-and-pooling.rst
@@ -140,6 +141,7 @@ public abstract class AbstractConnectionPoolTest {
             case UNIT: {
                 ServerId serverId = new ServerId(new ClusterId(), new ServerAddress("host1"));
                 pool = new DefaultConnectionPool(serverId, new TestInternalConnectionFactory(), settings);
+                pool.ready();
                 break;
             }
             case INTEGRATION: {
@@ -161,12 +163,13 @@ public abstract class AbstractConnectionPoolTest {
                 throw new AssertionError(format("Style %s is not implemented", style));
             }
         }
-        pool.start();
+        pool.start(mock(SdamServerDescriptionManager.class));
     }
 
     @After
     @SuppressWarnings("try")
     public void tearDown() {
+        // noinspection unused
         try (ConnectionPool autoCloseable = pool) {
             disableFailPoint();
         } finally {
@@ -434,8 +437,8 @@ public abstract class AbstractConnectionPoolTest {
         return expectedType.cast(next);
     }
 
-    private static BsonDocument executeAdminCommand(final BsonDocument command) {
-        return new CommandReadOperation<>("admin", command, new BsonDocumentCodec()).execute(ClusterFixture.getBinding());
+    private static void executeAdminCommand(final BsonDocument command) {
+        new CommandReadOperation<>("admin", command, new BsonDocumentCodec()).execute(ClusterFixture.getBinding());
     }
 
     private void setFailPoint() {
@@ -508,8 +511,8 @@ public abstract class AbstractConnectionPoolTest {
         }
 
         @Override
-        public void start() {
-            pool.start();
+        public void start(final SdamServerDescriptionManager sdam) {
+            pool.start(sdam);
         }
 
         @Override

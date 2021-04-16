@@ -17,6 +17,7 @@
 package com.mongodb.internal.connection;
 
 import com.mongodb.MongoConnectionPoolClearedException;
+import com.mongodb.MongoException;
 import com.mongodb.MongoInterruptedException;
 import com.mongodb.MongoTimeoutException;
 import com.mongodb.annotations.NotThreadSafe;
@@ -44,6 +45,7 @@ import com.mongodb.event.ConnectionReadyEvent;
 import com.mongodb.internal.Timeout;
 import com.mongodb.internal.async.SingleResultCallback;
 import com.mongodb.internal.connection.ConcurrentPool.Prune;
+import com.mongodb.internal.connection.SdamServerDescriptionManager.SdamIssue;
 import com.mongodb.internal.session.SessionContext;
 import com.mongodb.internal.thread.DaemonThreadFactory;
 import com.mongodb.lang.NonNull;
@@ -61,6 +63,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -97,6 +100,7 @@ class DefaultConnectionPool implements ConnectionPool {
     private volatile boolean closed;
     private final OpenConcurrencyLimiter openConcurrencyLimiter;
     private final StateAndGeneration stateAndGeneration;
+    private final AtomicReference<SdamServerDescriptionManager> sdam;
 
     DefaultConnectionPool(final ServerId serverId, final InternalConnectionFactory internalConnectionFactory,
                           final ConnectionPoolSettings settings) {
@@ -111,10 +115,12 @@ class DefaultConnectionPool implements ConnectionPool {
         connectionPoolCreated(connectionPoolListener, serverId, settings);
         openConcurrencyLimiter = new OpenConcurrencyLimiter(MAX_CONNECTING);
         stateAndGeneration = new StateAndGeneration();
+        sdam = new AtomicReference<>();
     }
 
     @Override
-    public void start() {
+    public void start(final SdamServerDescriptionManager sdam) {
+        assertTrue(this.sdam.compareAndSet(null, assertNotNull(sdam)));
         if (sizeMaintenanceTimer != null) {
             sizeMaintenanceTimer.scheduleAtFixedRate(maintenanceTask, settings.getMaintenanceInitialDelay(MILLISECONDS),
                     settings.getMaintenanceFrequency(MILLISECONDS), MILLISECONDS);
@@ -338,12 +344,19 @@ class DefaultConnectionPool implements ConnectionPool {
                             if (LOGGER.isDebugEnabled()) {
                                 LOGGER.debug(format("Ensuring minimum pooled connections to %s", serverId.getAddress()));
                             }
-                            pool.ensureMinSize(settings.getMinSize(), newConnection ->
-                                    openConcurrencyLimiter.openImmediately(new PooledConnection(newConnection)));
+                            pool.ensureMinSize(settings.getMinSize(), newConnection -> {
+                                try {
+                                    openConcurrencyLimiter.openImmediately(new PooledConnection(newConnection));
+                                } catch (MongoException e) {
+                                    SdamServerDescriptionManager sdam = assertNotNull(DefaultConnectionPool.this.sdam.get());
+                                    sdam.handleExceptionBeforeHandshake(SdamIssue.specific(e, sdam.context(newConnection)));
+                                    throw e;
+                                }
+                            });
                         }
                     } catch (MongoInterruptedException | MongoTimeoutException e) {
                         //complete the maintenance task
-                    } catch (Exception e) {
+                    } catch (RuntimeException e) {
                         LOGGER.warn("Exception thrown during connection pool background maintenance task", e);
                     }
                 }
@@ -1023,33 +1036,47 @@ class DefaultConnectionPool implements ConnectionPool {
         private boolean paused;
         private int generation;
         @Nullable
-        private Throwable cause;
+        private volatile Throwable cause;
 
         StateAndGeneration() {
             lock = new StampedLock();
-            paused = false; // VAKOTODO true
+            paused = true;
             generation = 0;
         }
 
         int generation() {
-            long stamp = lock.readLock();
-            try {
-                return generation;
-            } finally {
-                lock.unlockRead(stamp);
+            long stamp = lock.tryOptimisticRead();
+            int generation = this.generation;
+            if (!lock.validate(stamp)) {
+                stamp = lock.readLock();
+                try {
+                    generation = this.generation;
+                } finally {
+                    lock.unlockRead(stamp);
+                }
             }
+            return generation;
         }
 
         int generationOrThrowIfPaused() throws MongoConnectionPoolClearedException {
-            long stamp = lock.readLock();
-            try {
-                if (paused) {
-                    throw new MongoConnectionPoolClearedException(serverId, cause);
+            long stamp = lock.tryOptimisticRead();
+            int generation = this.generation;
+            boolean paused = this.paused;
+            Throwable cause = this.cause;
+            if (!lock.validate(stamp)) {
+                stamp = lock.readLock();
+                try {
+                    generation = this.generation;
+                    paused = this.paused;
+                    cause = this.cause;
+                } finally {
+                    lock.unlockRead(stamp);
                 }
-                return generation;
-            } finally {
-                lock.unlockRead(stamp);
             }
+            if (paused) {
+                throw new MongoConnectionPoolClearedException(serverId, cause);
+            }
+            return generation;
         }
 
         boolean pauseAndIncrementGeneration(@Nullable final Throwable cause) {

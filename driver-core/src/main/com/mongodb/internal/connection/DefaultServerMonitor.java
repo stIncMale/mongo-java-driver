@@ -39,17 +39,20 @@ import org.bson.codecs.BsonDocumentCodec;
 import org.bson.types.ObjectId;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.mongodb.MongoNamespace.COMMAND_COLLECTION_NAME;
 import static com.mongodb.ReadPreference.primary;
+import static com.mongodb.assertions.Assertions.assertNotNull;
+import static com.mongodb.assertions.Assertions.assertTrue;
 import static com.mongodb.assertions.Assertions.notNull;
-import static com.mongodb.connection.ServerConnectionState.CONNECTING;
 import static com.mongodb.connection.ServerType.UNKNOWN;
 import static com.mongodb.internal.connection.CommandHelper.executeCommand;
 import static com.mongodb.internal.connection.DescriptionHelper.createServerDescription;
+import static com.mongodb.internal.connection.ServerDescriptionHelper.unknownConnectingServerDescription;
 import static com.mongodb.internal.event.EventListenerHelper.getServerMonitorListener;
 import static java.lang.String.format;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -63,9 +66,8 @@ class DefaultServerMonitor implements ServerMonitor {
     private final ServerId serverId;
     private final ServerMonitorListener serverMonitorListener;
     private final ClusterClock clusterClock;
-    private final ChangeListener<ServerDescription> serverStateListener;
+    private final AtomicReference<SdamServerDescriptionManager> sdam;
     private final InternalConnectionFactory internalConnectionFactory;
-    private final ConnectionPool connectionPool;
     @Nullable
     private final ServerApi serverApi;
     private final ServerSettings serverSettings;
@@ -79,16 +81,14 @@ class DefaultServerMonitor implements ServerMonitor {
     private volatile boolean isClosed;
 
     DefaultServerMonitor(final ServerId serverId, final ServerSettings serverSettings,
-                         final ClusterClock clusterClock, final ChangeListener<ServerDescription> serverStateListener,
-                         final InternalConnectionFactory internalConnectionFactory, final ConnectionPool connectionPool,
-                         final @Nullable ServerApi serverApi) {
+                         final ClusterClock clusterClock,
+                         final InternalConnectionFactory internalConnectionFactory, final @Nullable ServerApi serverApi) {
         this.serverSettings = notNull("serverSettings", serverSettings);
         this.serverId = notNull("serverId", serverId);
         this.serverMonitorListener = getServerMonitorListener(serverSettings);
         this.clusterClock = notNull("clusterClock", clusterClock);
-        this.serverStateListener = serverStateListener;
+        this.sdam = new AtomicReference<>();
         this.internalConnectionFactory = notNull("internalConnectionFactory", internalConnectionFactory);
-        this.connectionPool = connectionPool;
         this.serverApi = serverApi;
         monitor = new ServerMonitorRunnable();
         monitorThread = new Thread(monitor, "cluster-" + this.serverId.getClusterId() + "-" + this.serverId.getAddress());
@@ -101,7 +101,8 @@ class DefaultServerMonitor implements ServerMonitor {
     }
 
     @Override
-    public void start() {
+    public void start(final SdamServerDescriptionManager sdam) {
+        assertTrue(this.sdam.compareAndSet(null, assertNotNull(sdam)));
         monitorThread.start();
         roundTripTimeMonitorThread.start();
     }
@@ -143,7 +144,7 @@ class DefaultServerMonitor implements ServerMonitor {
 
         @Override
         public void run() {
-            ServerDescription currentServerDescription = getConnectingServerDescription(null);
+            ServerDescription currentServerDescription = unknownConnectingServerDescription(serverId, null);
             try {
                 while (!isClosed) {
                     ServerDescription previousServerDescription = currentServerDescription;
@@ -160,11 +161,7 @@ class DefaultServerMonitor implements ServerMonitor {
                     }
 
                     logStateChange(previousServerDescription, currentServerDescription);
-                    serverStateListener.stateChanged(new ChangeEvent<>(previousServerDescription, currentServerDescription));
-
-                    if (currentServerDescription.getException() != null) {
-                        connectionPool.invalidate(currentServerDescription.getException());
-                    }
+                    assertNotNull(sdam.get()).update(currentServerDescription);
 
                     if (((connection == null || shouldStreamResponses(currentServerDescription))
                             && currentServerDescription.getTopologyVersion() != null)
@@ -180,10 +177,6 @@ class DefaultServerMonitor implements ServerMonitor {
                     connection.close();
                 }
             }
-        }
-
-        private ServerDescription getConnectingServerDescription(final Throwable exception) {
-            return ServerDescription.builder().type(UNKNOWN).state(CONNECTING).address(serverId.getAddress()).exception(exception).build();
         }
 
         private ServerDescription lookupServerDescription(final ServerDescription currentServerDescription) {
@@ -246,7 +239,7 @@ class DefaultServerMonitor implements ServerMonitor {
                 if (localConnection != null) {
                     localConnection.close();
                 }
-                return getConnectingServerDescription(t);
+                return unknownConnectingServerDescription(serverId, t);
             }
         }
 

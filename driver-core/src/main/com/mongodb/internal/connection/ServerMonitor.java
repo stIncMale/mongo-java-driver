@@ -18,7 +18,7 @@ package com.mongodb.internal.connection;
 
 interface ServerMonitor {
 
-    void start();
+    void start(SdamServerDescriptionManager sdam);
 
     void connect();
 

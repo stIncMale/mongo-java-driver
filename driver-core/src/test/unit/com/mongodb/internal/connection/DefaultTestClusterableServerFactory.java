@@ -32,8 +32,7 @@ public class DefaultTestClusterableServerFactory implements ClusterableServerFac
     private final ClusterId clusterId;
     private final ClusterConnectionMode clusterConnectionMode;
     private final ServerListenerFactory serverListenerFactory;
-    private final Map<ServerAddress, TestServerMonitorFactory> serverAddressToServerMonitorFactoryMap =
-            new HashMap<ServerAddress, TestServerMonitorFactory>();
+    private final Map<ServerAddress, TestServerMonitor> serverAddressToServerMonitorMap = new HashMap<>();
 
     public DefaultTestClusterableServerFactory(final ClusterId clusterId, final ClusterConnectionMode clusterConnectionMode,
                                                final ServerListenerFactory serverListenerFactory) {
@@ -46,11 +45,15 @@ public class DefaultTestClusterableServerFactory implements ClusterableServerFac
     public ClusterableServer create(final ServerAddress serverAddress,
                                     final ServerDescriptionChangedListener serverDescriptionChangedListener,
                                     final ServerListener serverListener, final ClusterClock clusterClock) {
-        TestServerMonitorFactory serverMonitorFactory = new TestServerMonitorFactory(new ServerId(clusterId, serverAddress));
-        serverAddressToServerMonitorFactoryMap.put(serverAddress, serverMonitorFactory);
-
-        return new DefaultServer(new ServerId(clusterId, serverAddress), clusterConnectionMode, new TestConnectionPool(),
-                new TestConnectionFactory(), serverMonitorFactory, serverDescriptionChangedListener,
+        ServerId serverId = new ServerId(clusterId, serverAddress);
+        TestServerMonitor serverMonitor = new TestServerMonitor();
+        serverAddressToServerMonitorMap.put(serverAddress, serverMonitor);
+        ConnectionPool connectionPool = new TestConnectionPool();
+        SdamServerDescriptionManager sdam = new DefaultSdamServerDescriptionManager(serverId, serverDescriptionChangedListener,
+                serverListener, serverMonitor, connectionPool);
+        connectionPool.start(sdam);
+        serverMonitor.start(sdam);
+        return new DefaultServer(serverId, clusterConnectionMode, connectionPool, new TestConnectionFactory(), serverMonitor, sdam,
                 serverListenerFactory.create(serverAddress), null, clusterClock);
     }
 
@@ -61,7 +64,7 @@ public class DefaultTestClusterableServerFactory implements ClusterableServerFac
 
 
     public void sendNotification(final ServerAddress serverAddress, final ServerDescription serverDescription) {
-        serverAddressToServerMonitorFactoryMap.get(serverAddress).sendNotification(serverDescription);
+        serverAddressToServerMonitorMap.get(serverAddress).updateServerDescription(serverDescription);
     }
 
 }

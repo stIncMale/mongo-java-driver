@@ -18,7 +18,7 @@ package com.mongodb;
 import com.mongodb.connection.ServerId;
 import com.mongodb.lang.Nullable;
 
-import static com.mongodb.assertions.Assertions.notNull;
+import static com.mongodb.assertions.Assertions.assertNotNull;
 
 /* This exception is our way to deal with a race condition existing due to threads concurrently
  * checking out connections from ConnectionPool and invalidating it.*/
@@ -36,7 +36,8 @@ public final class MongoConnectionPoolClearedException extends MongoException {
      * @param cause The {@linkplain #getCause() cause}.
      */
     public MongoConnectionPoolClearedException(final ServerId connectionPoolServerId, @Nullable final Throwable cause) {
-        super("Connection pool for + " + notNull("connectionPoolServerId", connectionPoolServerId)
-                + " was cleared because another operation failed", cause);
+        super("Connection pool for + " + assertNotNull(connectionPoolServerId)
+                + " is paused because another operation failed"
+                + (cause == null ? " or because it was not unpaused since its creation" : ""), cause);
     }
 }
