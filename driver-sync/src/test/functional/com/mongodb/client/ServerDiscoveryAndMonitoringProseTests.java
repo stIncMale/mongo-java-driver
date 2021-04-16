@@ -18,6 +18,7 @@ package com.mongodb.client;
 
 import com.mongodb.Block;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoInterruptedException;
 import com.mongodb.connection.ClusterConnectionMode;
 import com.mongodb.connection.ServerSettings;
 import com.mongodb.diagnostics.logging.Logger;
@@ -41,8 +42,6 @@ import org.bson.Document;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -60,7 +59,6 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.bson.BsonDocument.parse;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
@@ -164,23 +162,23 @@ public class ServerDiscoveryAndMonitoringProseTests {
         ServerMonitorListener serverMonitorListener = new ServerMonitorListener() {
             @Override
             public void serverHeartbeatSucceeded(final ServerHeartbeatSucceededEvent event) {
-                events.add(event);
+                put(events, event);
             }
 
             @Override
             public void serverHeartbeatFailed(final ServerHeartbeatFailedEvent event) {
-                events.add(event);
+                put(events, event);
             }
         };
         ConnectionPoolListener connectionPoolListener = new ConnectionPoolListener() {
             @Override
             public void connectionPoolReady(final ConnectionPoolReadyEvent event) {
-                events.add(event);
+                put(events, event);
             }
 
             @Override
             public void connectionPoolCleared(final ConnectionPoolClearedEvent event) {
-                events.add(event);
+                put(events, event);
             }
         };
         String appName = "SDAMPoolManagementTest";
@@ -197,8 +195,10 @@ public class ServerDiscoveryAndMonitoringProseTests {
                 .build();
         // noinspection unused
         try (MongoClient client = MongoClients.create(clientSettings)) {
-            assertPoll(events, singletonList(ServerHeartbeatSucceededEvent.class), null);
-            assertPoll(events, singletonList(ConnectionPoolReadyEvent.class), singletonList(ServerHeartbeatSucceededEvent.class));
+            /* Note that ServerHeartbeatSucceededEvent type is sometimes allowed but never required.
+             * This is because DefaultServerMonitor does not send such events in situations when a server check happens as part
+             * of a connection handshake. */
+            assertPoll(events, ServerHeartbeatSucceededEvent.class, ConnectionPoolReadyEvent.class);
             configureFailPoint(new BsonDocument()
                     .append("configureFailPoint", new BsonString("failCommand"))
                     .append("mode", new BsonDocument().append("times", new BsonInt32(2)))
@@ -206,31 +206,21 @@ public class ServerDiscoveryAndMonitoringProseTests {
                             .append("failCommands", new BsonArray(singletonList(new BsonString("isMaster"))))
                             .append("errorCode", new BsonInt32(1234))
                             .append("appName", new BsonString(appName))));
-            assertPoll(events, Arrays.asList(ServerHeartbeatFailedEvent.class, ConnectionPoolClearedEvent.class), null);
-            assertPoll(events, Arrays.asList(ServerHeartbeatSucceededEvent.class, ConnectionPoolReadyEvent.class), null);
+            assertPoll(events, ServerHeartbeatSucceededEvent.class, ServerHeartbeatFailedEvent.class);
+            assertPoll(events, null, ConnectionPoolClearedEvent.class);
+            assertPoll(events, ServerHeartbeatSucceededEvent.class, ConnectionPoolReadyEvent.class);
         } finally {
             disableFailPoint("failCommand");
         }
     }
 
-    private static void assertPoll(final BlockingQueue<Object> queue, final Collection<Class<?>> expectedUnorderedElementClasses,
-                                    @Nullable final Collection<Class<?>> unexpectedElementClasses) throws InterruptedException {
-        assertPoll(queue, expectedUnorderedElementClasses, unexpectedElementClasses,
-                Timeout.startNow(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS));
+    private static void assertPoll(final BlockingQueue<?> queue, @Nullable final Class<?> allowed, final Class<?> required)
+            throws InterruptedException {
+        assertPoll(queue, allowed, required, Timeout.startNow(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS));
     }
 
-    /**
-     * @param expectedUnorderedElementClasses {@link Class}es representing {@linkplain java.lang.reflect.Type types} of the {@code queue}
-     *                                        elements that must be retrieved and removed from it at least once. The method returns as soon
-     *                                        as elements of all the specified types are observed.
-     * @param unexpectedUnorderedElementClasses {@link Class}es representing {@linkplain java.lang.reflect.Type types} of the {@code queue}
-     *                                          elements such that are not expected to be encountered.
-     */
-    private static void assertPoll(final BlockingQueue<Object> queue, final Collection<Class<?>> expectedUnorderedElementClasses,
-                                    @Nullable final Collection<Class<?>> unexpectedUnorderedElementClasses, final Timeout timeout)
-            throws InterruptedException {
-        Collection<Class<?>> expectedClasses = new ArrayList<>(expectedUnorderedElementClasses);
-        List<Object> polledExpectedElements = new ArrayList<>();
+    private static void assertPoll(final BlockingQueue<?> queue, @Nullable final Class<?> allowed, final Class<?> required,
+                                   final Timeout timeout) throws InterruptedException {
         do {
             Object element;
             if (timeout.isImmediate()) {
@@ -242,18 +232,24 @@ public class ServerDiscoveryAndMonitoringProseTests {
             }
             if (element != null) {
                 if (LOGGER.isInfoEnabled()) {
-                    LOGGER.info("Polled element " + element.toString());
+                    LOGGER.info("Polled " + element.toString());
                 }
-                if (expectedClasses.removeIf(expectedElementClass -> expectedElementClass.isAssignableFrom(element.getClass()))) {
-                    polledExpectedElements.add(element);
-                } else if (unexpectedUnorderedElementClasses != null) {
-                    for (Class<?> unexpectedElementClass : unexpectedUnorderedElementClasses) {
-                        assertFalse("Unexpected element " + element, unexpectedElementClass.isInstance(element));
-                    }
+                Class<?> elementClass = element.getClass();
+                if (required.isAssignableFrom(elementClass)) {
+                    return;
+                } else {
+                    assertTrue(String.format("allowed %s, required %s, actual %s", allowed, required, elementClass),
+                            allowed != null && allowed.isAssignableFrom(elementClass));
                 }
             }
-        } while (polledExpectedElements.size() < expectedUnorderedElementClasses.size() && !timeout.expired());
-        assertEquals("Expected elements " + expectedUnorderedElementClasses + ", polled " + polledExpectedElements,
-                expectedUnorderedElementClasses.size(), polledExpectedElements.size());
+        } while (!timeout.expired());
+    }
+
+    private static <E> void put(final BlockingQueue<E> q, final E e) {
+        try {
+            q.put(e);
+        } catch (InterruptedException t) {
+            throw new MongoInterruptedException(null, t);
+        }
     }
 }
