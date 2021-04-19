@@ -52,7 +52,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         given:
         pool = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                                          builder().maxSize(1).build())
-        pool.start();
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.ready()
 
         expect:
@@ -63,7 +63,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         given:
         pool = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                                          builder().maxSize(1).build())
-        pool.start();
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.ready()
 
         when:
@@ -78,7 +78,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         given:
         pool = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                                          builder().maxSize(1).build())
-        pool.start();
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.ready()
 
         when:
@@ -92,7 +92,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         given:
         pool = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                                          builder().maxSize(1).maxWaitTime(1, MILLISECONDS).build())
-        pool.start();
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.ready()
 
         when:
@@ -112,7 +112,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         given:
         pool = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                                          builder().maxSize(1).maxWaitTime(50, MILLISECONDS).build())
-        pool.start();
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.ready()
         pool.get()
 
@@ -130,7 +130,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         given:
         pool = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                                          builder().maxSize(10).maintenanceInitialDelay(5, MINUTES).build())
-        pool.start();
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.ready()
 
         when:
@@ -145,7 +145,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         given:
         pool = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                                          builder().maxSize(10).minSize(5).maintenanceInitialDelay(5, MINUTES).build())
-        pool.start();
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.ready()
 
         when: 'the maintenance tasks runs'
@@ -360,7 +360,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         Throwable caught = null
 
         when:
-        pool.start()//must not unpause
+        pool.start(Mock(SdamServerDescriptionManager))
         try {
             pool.get()
         } catch (MongoConnectionPoolClearedException e) {
@@ -377,7 +377,7 @@ class DefaultConnectionPoolSpecification extends Specification {
         CompletableFuture<Throwable> caught = new CompletableFuture<>()
 
         when:
-        pool.start()//must not unpause
+        pool.start(Mock(SdamServerDescriptionManager))
         pool.getAsync { InternalConnection result, Throwable t ->
             if (t != null) {
                 caught.complete(t)

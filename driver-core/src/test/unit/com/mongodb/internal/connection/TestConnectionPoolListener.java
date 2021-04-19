@@ -26,6 +26,7 @@ import com.mongodb.event.ConnectionPoolClearedEvent;
 import com.mongodb.event.ConnectionPoolClosedEvent;
 import com.mongodb.event.ConnectionPoolCreatedEvent;
 import com.mongodb.event.ConnectionPoolListener;
+import com.mongodb.event.ConnectionPoolReadyEvent;
 import com.mongodb.event.ConnectionReadyEvent;
 
 import java.util.ArrayList;
@@ -120,6 +121,11 @@ public class TestConnectionPoolListener implements ConnectionPoolListener {
 
     @Override
     public void connectionPoolCleared(final ConnectionPoolClearedEvent event) {
+        addEvent(event);
+    }
+
+    @Override
+    public void connectionPoolReady(final ConnectionPoolReadyEvent event) {
         addEvent(event);
     }
 

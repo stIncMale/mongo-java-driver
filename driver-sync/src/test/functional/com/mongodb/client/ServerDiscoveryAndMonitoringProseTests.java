@@ -157,7 +157,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
     @Test
     @SuppressWarnings("try")
     public void testConnectionPoolManagement() throws InterruptedException {
-        assumeTrue(serverVersionAtLeast(4, 9));
+        assumeTrue(serverVersionAtLeast(4, 9)); // VAKOTODO change to 4.3?
         BlockingQueue<Object> events = new SynchronousQueue<>(true);
         ServerMonitorListener serverMonitorListener = new ServerMonitorListener() {
             @Override
@@ -249,7 +249,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
         try {
             q.put(e);
         } catch (InterruptedException t) {
-            throw new MongoInterruptedException(null, t);
+            throw new MongoInterruptedException("VAKOTODO null", t);
         }
     }
 }

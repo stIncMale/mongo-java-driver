@@ -43,7 +43,8 @@ class JMXConnectionPoolListenerSpecification extends Specification {
         provider = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                 ConnectionPoolSettings.builder().minSize(0).maxSize(5)
                         .addConnectionPoolListener(jmxListener).build())
-        provider.start();
+        provider.start(Mock(SdamServerDescriptionManager))
+        provider.ready()
 
         when:
         provider.get()
@@ -68,7 +69,7 @@ class JMXConnectionPoolListenerSpecification extends Specification {
         provider = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                 ConnectionPoolSettings.builder().minSize(0).maxSize(5)
                         .addConnectionPoolListener(jmxListener).build())
-        provider.start();
+        provider.start(Mock(SdamServerDescriptionManager))
 
         then:
         ManagementFactory.getPlatformMBeanServer().isRegistered(
@@ -83,7 +84,7 @@ class JMXConnectionPoolListenerSpecification extends Specification {
         provider = new DefaultConnectionPool(SERVER_ID, connectionFactory,
                 ConnectionPoolSettings.builder().minSize(0).maxSize(5)
                         .addConnectionPoolListener(jmxListener).build())
-        provider.start();
+        provider.start(Mock(SdamServerDescriptionManager))
 
         when:
         provider.close()
