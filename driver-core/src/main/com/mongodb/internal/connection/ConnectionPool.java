@@ -31,7 +31,7 @@ interface ConnectionPool extends Closeable {
 
     /**
      * Start background tasks, e.g., creating connections in the background.
-     * This method does not change the {@linkplain #invalidate() paused}/{@linkplain #ready() unpaused} state of the pool,
+     * This method does not change the {@linkplain #invalidate() paused}/{@linkplain #ready() ready} state of the pool,
      * but the actions performed by background tasks may depend on the state or may change the state.
      */
     void start(SdamServerDescriptionManager sdam);

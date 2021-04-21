@@ -17,9 +17,9 @@
 package com.mongodb.client;
 
 import com.mongodb.Block;
+import com.mongodb.ClusterFixture;
 import com.mongodb.MongoClientSettings;
 import com.mongodb.MongoInterruptedException;
-import com.mongodb.connection.ClusterConnectionMode;
 import com.mongodb.connection.ServerSettings;
 import com.mongodb.diagnostics.logging.Logger;
 import com.mongodb.diagnostics.logging.Loggers;
@@ -32,7 +32,6 @@ import com.mongodb.event.ServerHeartbeatSucceededEvent;
 import com.mongodb.event.ServerListener;
 import com.mongodb.event.ServerMonitorListener;
 import com.mongodb.internal.Timeout;
-import com.mongodb.internal.selector.PrimaryServerSelector;
 import com.mongodb.lang.Nullable;
 import org.bson.BsonArray;
 import org.bson.BsonDocument;
@@ -157,7 +156,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
     @Test
     @SuppressWarnings("try")
     public void testConnectionPoolManagement() throws InterruptedException {
-        assumeTrue(serverVersionAtLeast(4, 9)); // VAKOTODO change to 4.3?
+        assumeTrue(serverVersionAtLeast(4, 3));
         BlockingQueue<Object> events = new SynchronousQueue<>(true);
         ServerMonitorListener serverMonitorListener = new ServerMonitorListener() {
             @Override
@@ -184,9 +183,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
         String appName = "SDAMPoolManagementTest";
         MongoClientSettings clientSettings = getMongoClientSettingsBuilder()
                 .applicationName(appName)
-                .applyToClusterSettings(builder -> builder
-                        .mode(ClusterConnectionMode.SINGLE)
-                        .serverSelector(new PrimaryServerSelector()))
+                .applyToClusterSettings(ClusterFixture::setDirectConnection)
                 .applyToServerSettings(builder -> builder
                         .heartbeatFrequency(100, TimeUnit.MILLISECONDS)
                         .addServerMonitorListener(serverMonitorListener))
@@ -201,7 +198,8 @@ public class ServerDiscoveryAndMonitoringProseTests {
             assertPoll(events, ServerHeartbeatSucceededEvent.class, ConnectionPoolReadyEvent.class);
             configureFailPoint(new BsonDocument()
                     .append("configureFailPoint", new BsonString("failCommand"))
-                    .append("mode", new BsonDocument().append("times", new BsonInt32(2)))
+                    .append("mode", new BsonDocument()
+                            .append("times", new BsonInt32(2)))
                     .append("data", new BsonDocument()
                             .append("failCommands", new BsonArray(singletonList(new BsonString("isMaster"))))
                             .append("errorCode", new BsonInt32(1234))
@@ -249,7 +247,7 @@ public class ServerDiscoveryAndMonitoringProseTests {
         try {
             q.put(e);
         } catch (InterruptedException t) {
-            throw new MongoInterruptedException("VAKOTODO null", t);
+            throw new MongoInterruptedException(null, t);
         }
     }
 }

@@ -40,11 +40,10 @@ final class TopologyVersionHelper {
      *     {@linkplain ServerDescription#getTopologyVersion() topology version}, and that information must be applied by the client even if
      *     the topology version has not changed.</li>
      *     <li>The client may {@linkplain ConnectionPool#invalidate() pause} a {@link ConnectionPool}
-     *     and then {@linkplain ConnectionPool#ready() unpause},
-     *     e.g., based on receiving a new {@link ServerDescription} from a {@link ServerMonitor},
-     *     without the server for that pool changing its topology version.
+     *     and then {@linkplain ConnectionPool#ready() mark it ready} based on receiving a new {@link ServerDescription}
+     *     from a {@link ServerMonitor}, without the server for that pool changing its topology version.
      *     Consequently, a candidate {@link ServerDescription} cannot be rejected solely based on the fact that its
-     *     {@linkplain ServerDescription#getTopologyVersion() topology version} ia equal to the one that the client considers current.</li>
+     *     {@linkplain ServerDescription#getTopologyVersion() topology version} is equal to the one that the client considers current.</li>
      * </ul>
      *
      * @return {@code true} if and only if {@code current} is considered newer than {@code candidate}.

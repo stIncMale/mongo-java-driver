@@ -141,7 +141,6 @@ public abstract class AbstractConnectionPoolTest {
             case UNIT: {
                 ServerId serverId = new ServerId(new ClusterId(), new ServerAddress("host1"));
                 pool = new DefaultConnectionPool(serverId, new TestInternalConnectionFactory(), settings);
-                pool.ready();
                 break;
             }
             case INTEGRATION: {

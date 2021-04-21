@@ -36,6 +36,11 @@ import static com.mongodb.assertions.Assertions.assertTrue;
 import static com.mongodb.internal.connection.ServerDescriptionHelper.unknownConnectingServerDescription;
 import static com.mongodb.internal.operation.ServerVersionHelper.FOUR_DOT_TWO_WIRE_VERSION;
 
+/**
+ * See the
+ * <a href="https://github.com/mongodb/specifications/blob/master/source/server-discovery-and-monitoring/server-discovery-and-monitoring.rst">
+ * Server Discovery And Monitoring</a> specification.
+ */
 @ThreadSafe
 interface SdamServerDescriptionManager {
     /**
@@ -94,10 +99,17 @@ interface SdamServerDescriptionManager {
         }
 
         /**
-         * @return An exception if and only if this {@link SdamIssue} is {@linkplain #specific(Throwable, Context) specific}.
+         * @return An exception if and only if this {@link SdamIssue} is {@linkplain #isSpecific()}.
          */
         Optional<Throwable> exception() {
             return Optional.ofNullable(exception);
+        }
+
+        /**
+         * @return {@code true} if and only if this {@link SdamIssue} has an exception {@linkplain #specific(Throwable, Context) specified}.
+         */
+        boolean isSpecific() {
+            return exception != null;
         }
 
         ServerDescription serverDescription() {

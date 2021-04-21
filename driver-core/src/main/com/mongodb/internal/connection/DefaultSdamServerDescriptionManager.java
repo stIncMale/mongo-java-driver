@@ -26,6 +26,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.mongodb.assertions.Assertions.assertNotNull;
+import static com.mongodb.assertions.Assertions.assertTrue;
 import static com.mongodb.connection.ServerType.UNKNOWN;
 import static com.mongodb.internal.connection.EventHelper.wouldDescriptionsGenerateEquivalentEvents;
 import static com.mongodb.internal.connection.ServerDescriptionHelper.unknownConnectingServerDescription;
@@ -57,12 +58,20 @@ final class DefaultSdamServerDescriptionManager implements SdamServerDescription
     public void update(final ServerDescription candidateDescription) {
         lock.lock();
         try {
-            if (updateDescription(candidateDescription)) {
-                if (candidateDescription.getType() == UNKNOWN) {
-                    connectionPool.invalidate();
-                } else {
-                    connectionPool.ready();
-                }
+            if (TopologyVersionHelper.newer(description.getTopologyVersion(), candidateDescription.getTopologyVersion())) {
+                return;
+            }
+            /* A paused pool should not be exposed and used. Calling `ready` before updating description and calling `invalidate` after
+             * facilitates achieving this. However, because once the pool is observed, it may be used concurrently with the pool being
+             * invalidated by either the current method or the `handleException` method, the pool still may be used in a paused state.
+             * For those cases `MongoConnectionPoolClearedException` was introduced. */
+            if (candidateDescription.getType() != UNKNOWN) {
+                connectionPool.ready();
+            }
+            updateDescription(candidateDescription);
+            if (candidateDescription.getException() != null) {
+                assertTrue(candidateDescription.getType() == UNKNOWN);
+                connectionPool.invalidate();
             }
         } finally {
             lock.unlock();
@@ -99,10 +108,7 @@ final class DefaultSdamServerDescriptionManager implements SdamServerDescription
         return new SdamIssue.Context(serverId, connection.getGeneration(), connection.getDescription().getMaxWireVersion());
     }
 
-    private boolean updateDescription(final ServerDescription candidateDescription) {
-        if (TopologyVersionHelper.newer(description.getTopologyVersion(), candidateDescription.getTopologyVersion())) {
-            return false;
-        }
+    private void updateDescription(final ServerDescription candidateDescription) {
         ServerDescription previousDescription = description;
         description = candidateDescription;
         ServerDescriptionChangedEvent serverDescriptionChangedEvent = new ServerDescriptionChangedEvent(
@@ -111,7 +117,6 @@ final class DefaultSdamServerDescriptionManager implements SdamServerDescription
         if (!wouldDescriptionsGenerateEquivalentEvents(description, previousDescription)) {
             serverListener.serverDescriptionChanged(serverDescriptionChangedEvent);
         }
-        return true;
     }
 
     private void handleException(final SdamIssue sdamIssue, final boolean beforeHandshake) {
@@ -121,15 +126,15 @@ final class DefaultSdamServerDescriptionManager implements SdamServerDescription
         if (sdamIssue.relatedToStateChange()) {
             updateDescription(sdamIssue.serverDescription());
             if (sdamIssue.serverIsLessThanVersionFourDotTwo() || sdamIssue.relatedToShutdown()) {
-                connectionPool.invalidate(sdamIssue.exception().orElseThrow(AssertionError::new));
+                connectionPool.invalidate(sdamIssue.exception().orElse(null));
             }
             serverMonitor.connect();
         } else if (sdamIssue.relatedToNetworkNotTimeout()
                 || (beforeHandshake && (sdamIssue.relatedToNetworkTimeout() || sdamIssue.relatedToAuth()))) {
             updateDescription(sdamIssue.serverDescription());
-            connectionPool.invalidate(sdamIssue.exception().orElseThrow(AssertionError::new));
+            connectionPool.invalidate(sdamIssue.exception().orElse(null));
             serverMonitor.cancelCurrentCheck();
-        } else if (sdamIssue.relatedToWriteConcern() || !sdamIssue.exception().isPresent()) {
+        } else if (sdamIssue.relatedToWriteConcern() || !sdamIssue.isSpecific()) {
             updateDescription(sdamIssue.serverDescription());
             if (sdamIssue.serverIsLessThanVersionFourDotTwo()) {
                 connectionPool.invalidate(sdamIssue.exception().orElse(null));

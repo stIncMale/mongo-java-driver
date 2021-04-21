@@ -23,8 +23,9 @@ import static com.mongodb.assertions.Assertions.assertNotNull;
 /* This exception is our way to deal with a race condition existing due to threads concurrently
  * checking out connections from ConnectionPool and invalidating it.*/
 /**
- * An exception that may happen in one thread as a result of (usually) another thread clearing a connection pool.
- * Such clearing usually happens as a result of an exception, in which case it is specified via the {@link #getCause()} method.
+ * An exception that may happen usually as a result of another thread clearing a connection pool.
+ * Such clearing usually itself happens as a result of an exception,
+ * in which case it may be specified via the {@link #getCause()} method.
  */
 public final class MongoConnectionPoolClearedException extends MongoException {
     private static final long serialVersionUID = 1;
@@ -36,8 +37,7 @@ public final class MongoConnectionPoolClearedException extends MongoException {
      * @param cause The {@linkplain #getCause() cause}.
      */
     public MongoConnectionPoolClearedException(final ServerId connectionPoolServerId, @Nullable final Throwable cause) {
-        super("Connection pool for + " + assertNotNull(connectionPoolServerId)
-                + " is paused because another operation failed"
-                + (cause == null ? " or because it was not unpaused since its creation" : ""), cause);
+        super("Connection pool for " + assertNotNull(connectionPoolServerId) + " is paused"
+                + (cause == null ? "" : " because another operation failed"), cause);
     }
 }

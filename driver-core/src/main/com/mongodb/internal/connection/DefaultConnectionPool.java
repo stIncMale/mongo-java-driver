@@ -207,7 +207,7 @@ class DefaultConnectionPool implements ConnectionPool {
         Throwable result = t;
         if (t instanceof MongoTimeoutException) {
             connectionPoolListener.connectionCheckOutFailed(new ConnectionCheckOutFailedEvent(serverId, Reason.TIMEOUT));
-        } else if (t instanceof MongoOpenConnectionInternalException) {
+        } else if (t instanceof MongoOpenConnectionInternalException || t instanceof MongoConnectionPoolClearedException) {
             connectionPoolListener.connectionCheckOutFailed(new ConnectionCheckOutFailedEvent(serverId, Reason.CONNECTION_ERROR));
             result = MongoOpenConnectionInternalException.unwrap(t);
         } else if (t instanceof IllegalStateException && t.getMessage().equals("The pool is closed")) {
