@@ -264,7 +264,7 @@ class DefaultConnectionPool implements ConnectionPool {
     @Override
     public void ready() {
         LOGGER.debug("Marking the connection pool as 'ready'");
-        if (stateAndGeneration.unpause()) {
+        if (stateAndGeneration.ready()) {
             connectionPoolListener.connectionPoolReady(new ConnectionPoolReadyEvent(serverId));
         }
     }
@@ -331,7 +331,7 @@ class DefaultConnectionPool implements ConnectionPool {
     private Runnable createMaintenanceTask() {
         Runnable newMaintenanceTask = null;
         if (shouldPrune() || shouldEnsureMinSize()) {
-            Predicate<RuntimeException> silentlyCompletePredicate = e -> Stream.of(
+            Predicate<RuntimeException> silentlyComplete = e -> Stream.of(
                     MongoInterruptedException.class, MongoTimeoutException.class, MongoConnectionPoolClearedException.class)
                     .anyMatch(element -> element.isAssignableFrom(e.getClass()));
             newMaintenanceTask = new Runnable() {
@@ -347,7 +347,7 @@ class DefaultConnectionPool implements ConnectionPool {
                         }
                         lastPrunedGeneration.set(curGeneration);
                         if (shouldEnsureMinSize()) {
-                            stateAndGeneration.waitForUnpaused();
+                            stateAndGeneration.waitForReady();
                             if (LOGGER.isDebugEnabled()) {
                                 LOGGER.debug(format("Ensuring minimum pooled connections to %s", serverId.getAddress()));
                             }
@@ -356,7 +356,7 @@ class DefaultConnectionPool implements ConnectionPool {
                                     openConcurrencyLimiter.openImmediately(new PooledConnection(newConnection));
                                 } catch (MongoException | MongoOpenConnectionInternalException e) {
                                     RuntimeException actualE = (RuntimeException) MongoOpenConnectionInternalException.unwrap(e);
-                                    if (!silentlyCompletePredicate.test(actualE)) {
+                                    if (!silentlyComplete.test(actualE)) {
                                         SdamServerDescriptionManager sdam = assertNotNull(DefaultConnectionPool.this.sdam.get());
                                         sdam.handleExceptionBeforeHandshake(SdamIssue.specific(actualE, sdam.context(newConnection)));
                                     }
@@ -365,7 +365,7 @@ class DefaultConnectionPool implements ConnectionPool {
                             });
                         }
                     } catch (RuntimeException e) {
-                        if (!silentlyCompletePredicate.test(e)) {
+                        if (!silentlyComplete.test(e)) {
                             LOGGER.warn("Exception thrown during connection pool background maintenance task", e);
                             throw e;
                         }
@@ -1072,21 +1072,6 @@ class DefaultConnectionPool implements ConnectionPool {
             generation = 0;
         }
 
-        void waitForUnpaused() {
-            lock.writeLock().lock();
-            try {
-                while (paused) {
-                    try {
-                        pausedCondition.await();
-                    } catch (InterruptedException e) {
-                        throw new MongoInterruptedException("VAKOTODO null", e);
-                    }
-                }
-            } finally {
-                lock.writeLock().unlock();
-            }
-        }
-
         int generation() {
             lock.readLock().lock();
             try {
@@ -1111,6 +1096,10 @@ class DefaultConnectionPool implements ConnectionPool {
             throw new MongoConnectionPoolClearedException(serverId, cause);
         }
 
+        /**
+         * @return {@code true} if and only if the state changed from ready to paused as a result of the operation.
+         * The generation is incremented regardless of the returned value.
+         */
         boolean pauseAndIncrementGeneration(@Nullable final Throwable cause) {
             lock.writeLock().lock();
             try {
@@ -1124,7 +1113,7 @@ class DefaultConnectionPool implements ConnectionPool {
             }
         }
 
-        boolean unpause() {
+        boolean ready() {
             lock.writeLock().lock();
             try {
                 boolean result = this.paused;
@@ -1134,6 +1123,21 @@ class DefaultConnectionPool implements ConnectionPool {
                     pausedCondition.signalAll();
                 }
                 return result;
+            } finally {
+                lock.writeLock().unlock();
+            }
+        }
+
+        void waitForReady() {
+            lock.writeLock().lock();
+            try {
+                while (paused) {
+                    try {
+                        pausedCondition.await();
+                    } catch (InterruptedException e) {
+                        throw new MongoInterruptedException(null, e);
+                    }
+                }
             } finally {
                 lock.writeLock().unlock();
             }

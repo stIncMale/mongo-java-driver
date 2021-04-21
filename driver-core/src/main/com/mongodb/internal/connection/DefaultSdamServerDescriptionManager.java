@@ -134,7 +134,7 @@ final class DefaultSdamServerDescriptionManager implements SdamServerDescription
             updateDescription(sdamIssue.serverDescription());
             connectionPool.invalidate(sdamIssue.exception().orElse(null));
             serverMonitor.cancelCurrentCheck();
-        } else if (sdamIssue.relatedToWriteConcern() || !sdamIssue.isSpecific()) {
+        } else if (sdamIssue.relatedToWriteConcern() || !sdamIssue.specific()) {
             updateDescription(sdamIssue.serverDescription());
             if (sdamIssue.serverIsLessThanVersionFourDotTwo()) {
                 connectionPool.invalidate(sdamIssue.exception().orElse(null));

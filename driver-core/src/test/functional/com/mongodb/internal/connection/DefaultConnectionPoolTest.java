@@ -16,6 +16,7 @@
 
 package com.mongodb.internal.connection;
 
+import com.mongodb.MongoConnectionPoolClearedException;
 import com.mongodb.ServerAddress;
 import com.mongodb.connection.ClusterId;
 import com.mongodb.connection.ConnectionDescription;
@@ -81,6 +82,7 @@ public class DefaultConnectionPoolTest {
     @After
     @SuppressWarnings("try")
     public void cleanup() throws InterruptedException {
+        // noinspection unused
         try (DefaultConnectionPool closed = provider) {
             cachedExecutor.shutdownNow();
             //noinspection ResultOfMethodCallIgnored
@@ -253,6 +255,8 @@ public class DefaultConnectionPoolTest {
                 .maintenanceInitialDelay(0, NANOSECONDS)
                 .maintenanceFrequency(100, MILLISECONDS)
                 .build());
+        provider.start(mock(SdamServerDescriptionManager.class));
+        provider.ready();
         assertUseConcurrently(provider, 2 * maxAvailableConnections, cachedExecutor, SECONDS.toNanos(15));
     }
 
@@ -267,6 +271,8 @@ public class DefaultConnectionPoolTest {
                 .maxWaitTime(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS)
                 .maintenanceInitialDelay(MAX_VALUE, NANOSECONDS)
                 .build());
+        provider.start(mock(SdamServerDescriptionManager.class));
+        provider.ready();
         acquireOpenPermits(provider, MAX_CONNECTING, InfiniteCheckoutEmulation.INFINITE_CALLBACK, controllableConnFactory, listener);
         assertUseConcurrently(provider, 2 * maxAvailableConnections, cachedExecutor, SECONDS.toNanos(10));
     }
@@ -297,6 +303,8 @@ public class DefaultConnectionPoolTest {
                 .addConnectionPoolListener(listener)
                 .maintenanceInitialDelay(MAX_VALUE, NANOSECONDS)
                 .build());
+        provider.start(mock(SdamServerDescriptionManager.class));
+        provider.ready();
         List<InternalConnection> connections = new ArrayList<>();
         for (int i = 0; i < openConnectionsCount; i++) {
             connections.add(provider.get(0, NANOSECONDS));
@@ -359,26 +367,40 @@ public class DefaultConnectionPoolTest {
         Runnable spontaneouslyInvalidate = () -> {
             if (ThreadLocalRandom.current().nextFloat() < 0.02) {
                 pool.invalidate();
+                pool.ready();
             }
         };
         Collection<Future<?>> tasks = new ArrayList<>();
         Timeout duration = Timeout.startNow(durationNanos);
         for (int i = 0; i < concurrentUsersCount; i++) {
-            if (i % 2 == 0) {//check out synchronously
+            if (i % 2 == 0) {//check out synchronously and check in
                 tasks.add(executor.submit(() -> {
                     while (!(duration.expired() || Thread.currentThread().isInterrupted())) {
                         spontaneouslyInvalidate.run();
-                        pool.get(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS).close();
+                        InternalConnection conn = null;
+                        try {
+                            conn = pool.get(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS);
+                        } catch (MongoConnectionPoolClearedException e) {
+                            // expected because we spontaneously invalidate `pool`
+                        } finally {
+                            if (conn != null) {
+                                conn.close();
+                            }
+                        }
                     }
                 }));
-            } else {//check out asynchronously
+            } else {//check out asynchronously and check in
                 tasks.add(executor.submit(() -> {
                     while (!(duration.expired() || Thread.currentThread().isInterrupted())) {
                         spontaneouslyInvalidate.run();
                         CompletableFuture<InternalConnection> futureCheckOutCheckIn = new CompletableFuture<>();
                         pool.getAsync((conn, t) -> {
                             if (t != null) {
-                                futureCheckOutCheckIn.completeExceptionally(t);
+                                if (t instanceof MongoConnectionPoolClearedException) {
+                                    futureCheckOutCheckIn.complete(null); // expected because we spontaneously invalidate `pool`
+                                } else {
+                                    futureCheckOutCheckIn.completeExceptionally(t);
+                                }
                             } else {
                                 conn.close();
                                 futureCheckOutCheckIn.complete(null);

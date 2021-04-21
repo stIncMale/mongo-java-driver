@@ -99,7 +99,7 @@ interface SdamServerDescriptionManager {
         }
 
         /**
-         * @return An exception if and only if this {@link SdamIssue} is {@linkplain #isSpecific()}.
+         * @return An exception if and only if this {@link SdamIssue} is {@linkplain #specific()}.
          */
         Optional<Throwable> exception() {
             return Optional.ofNullable(exception);
@@ -108,7 +108,7 @@ interface SdamServerDescriptionManager {
         /**
          * @return {@code true} if and only if this {@link SdamIssue} has an exception {@linkplain #specific(Throwable, Context) specified}.
          */
-        boolean isSpecific() {
+        boolean specific() {
             return exception != null;
         }
 
