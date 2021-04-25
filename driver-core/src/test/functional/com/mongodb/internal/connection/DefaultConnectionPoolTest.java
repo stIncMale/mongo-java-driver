@@ -26,6 +26,7 @@ import com.mongodb.connection.ServerId;
 import com.mongodb.event.ConnectionCreatedEvent;
 import com.mongodb.internal.Timeout;
 import com.mongodb.internal.async.SingleResultCallback;
+import jdk.internal.org.jline.utils.OSUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -66,7 +67,7 @@ import static org.mockito.Mockito.withSettings;
  */
 public class DefaultConnectionPoolTest {
     private static final ServerId SERVER_ID = new ServerId(new ClusterId(), new ServerAddress());
-    private static final long TEST_WAIT_TIMEOUT_MILLIS = SECONDS.toMillis(5);
+    private static final long TEST_WAIT_TIMEOUT_MILLIS = SECONDS.toMillis(50000);
 
     private TestInternalConnectionFactory connectionFactory;
 
@@ -246,18 +247,22 @@ public class DefaultConnectionPoolTest {
 
     @Test
     public void concurrentUsage() throws InterruptedException {
-        int maxAvailableConnections = 7;
-        ControllableConnectionFactory controllableConnFactory = newControllableConnectionFactory(cachedExecutor);
-        provider = new DefaultConnectionPool(SERVER_ID, controllableConnFactory.factory, ConnectionPoolSettings.builder()
-                .maxSize(MAX_CONNECTING + maxAvailableConnections)
-                .minSize(2)
-                .maxWaitTime(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS)
-                .maintenanceInitialDelay(0, NANOSECONDS)
-                .maintenanceFrequency(100, MILLISECONDS)
-                .build());
-        provider.start(mock(SdamServerDescriptionManager.class));
-        provider.ready();
-        assertUseConcurrently(provider, 2 * maxAvailableConnections, cachedExecutor, SECONDS.toNanos(15));
+        for (int i = 0; i < 1000 && ! Thread.currentThread().isInterrupted(); i++) {
+            System.out.println("ATTEMPT " + i);
+//            Thread.sleep(500);
+            int maxAvailableConnections = 3;
+            ControllableConnectionFactory controllableConnFactory = newControllableConnectionFactory(cachedExecutor);
+            provider = new DefaultConnectionPool(SERVER_ID, controllableConnFactory.factory, ConnectionPoolSettings.builder()
+                    .maxSize(MAX_CONNECTING + maxAvailableConnections)
+                    .minSize(2)
+                    .maxWaitTime(TEST_WAIT_TIMEOUT_MILLIS, MILLISECONDS)
+                    .maintenanceInitialDelay(0, NANOSECONDS)
+                    .maintenanceFrequency(100, MILLISECONDS)
+                    .build());
+            provider.start(mock(SdamServerDescriptionManager.class));
+            provider.ready();
+            assertUseConcurrently(provider, 2 * maxAvailableConnections, cachedExecutor, SECONDS.toNanos(15));
+        }
     }
 
     @Test

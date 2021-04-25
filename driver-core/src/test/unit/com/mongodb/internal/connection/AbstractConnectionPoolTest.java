@@ -39,6 +39,7 @@ import com.mongodb.event.ConnectionPoolClosedEvent;
 import com.mongodb.event.ConnectionPoolCreatedEvent;
 import com.mongodb.event.ConnectionPoolReadyEvent;
 import com.mongodb.event.ConnectionReadyEvent;
+import com.mongodb.event.ServerListener;
 import com.mongodb.internal.async.SingleResultCallback;
 import com.mongodb.internal.operation.CommandReadOperation;
 import com.mongodb.lang.Nullable;
@@ -141,6 +142,7 @@ public abstract class AbstractConnectionPoolTest {
             case UNIT: {
                 ServerId serverId = new ServerId(new ClusterId(), new ServerAddress("host1"));
                 pool = new DefaultConnectionPool(serverId, new TestInternalConnectionFactory(), settings);
+                pool.start(mock(SdamServerDescriptionManager.class));
                 break;
             }
             case INTEGRATION: {
@@ -155,6 +157,8 @@ public abstract class AbstractConnectionPoolTest {
                                 new TestCommandListener(),
                                 ClusterFixture.getServerApi()),
                         settings));
+                pool.start(new DefaultSdamServerDescriptionManager(serverId, mock(ServerDescriptionChangedListener.class),
+                        mock(ServerListener.class), mock(ServerMonitor.class), pool));
                 setFailPoint();
                 break;
             }
@@ -162,7 +166,6 @@ public abstract class AbstractConnectionPoolTest {
                 throw new AssertionError(format("Style %s is not implemented", style));
             }
         }
-        pool.start(mock(SdamServerDescriptionManager.class));
     }
 
     @After
