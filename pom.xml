@@ -31,6 +31,10 @@
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver-core</artifactId>
+<!--            <version>4.5.0-snapshot-fair</version>-->
+<!--            <version>4.5.0-snapshot-permits-CAS</version>-->
+<!--            <version>4.5.0-snapshot-permits</version>-->
+<!--            <version>4.5.0-snapshot-proposed</version>-->
             <version>4.5.0-SNAPSHOT</version>
 <!--            <version>4.5.0-unfair-SNAPSHOT</version>-->
 <!--            <version>4.5.0-tryLock-unguardedRelease_JAVA-4435</version>-->
