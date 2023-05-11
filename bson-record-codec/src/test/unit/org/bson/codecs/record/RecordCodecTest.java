@@ -17,6 +17,7 @@
 package org.bson.codecs.record;
 
 import org.bson.BsonArray;
+import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonDocumentReader;
 import org.bson.BsonDocumentWriter;
@@ -27,7 +28,12 @@ import org.bson.BsonString;
 import org.bson.codecs.DecoderContext;
 import org.bson.codecs.EncoderContext;
 import org.bson.codecs.configuration.CodecConfigurationException;
+import org.bson.codecs.configuration.CodecRegistries;
+import org.bson.codecs.pojo.PojoCodecProvider;
+import org.bson.codecs.record.samples.TestPojoJava578;
+import org.bson.codecs.record.samples.TestPojoWithInterfaceField;
 import org.bson.codecs.record.samples.TestRecordEmbedded;
+import org.bson.codecs.record.samples.TestRecordJava578;
 import org.bson.codecs.record.samples.TestRecordParameterized;
 import org.bson.codecs.record.samples.TestRecordWithDeprecatedAnnotations;
 import org.bson.codecs.record.samples.TestRecordWithIllegalBsonCreatorOnConstructor;
@@ -42,6 +48,7 @@ import org.bson.codecs.record.samples.TestRecordWithIllegalBsonIgnoreOnComponent
 import org.bson.codecs.record.samples.TestRecordWithIllegalBsonPropertyOnAccessor;
 import org.bson.codecs.record.samples.TestRecordWithIllegalBsonPropertyOnCanonicalConstructor;
 import org.bson.codecs.record.samples.TestRecordWithIllegalBsonRepresentationOnAccessor;
+import org.bson.codecs.record.samples.TestRecordWithInterfaceComponent;
 import org.bson.codecs.record.samples.TestRecordWithListOfListOfRecords;
 import org.bson.codecs.record.samples.TestRecordWithListOfRecords;
 import org.bson.codecs.record.samples.TestRecordWithMapOfListOfRecords;
@@ -407,5 +414,123 @@ public class RecordCodecTest {
                 new RecordCodec<>(TestRecordWithIllegalBsonExtraElementsOnComponent.class, Bson.DEFAULT_CODEC_REGISTRY));
         assertThrows(CodecConfigurationException.class, () ->
                 new RecordCodec<>(TestRecordWithIllegalBsonExtraElementsOnAccessor.class, Bson.DEFAULT_CODEC_REGISTRY));
+    }
+
+    @Test
+    public void testRecordJava578() {
+        var codec = new RecordCodec<>(TestRecordJava578.class, CodecRegistries.fromProviders(
+                Bson.DEFAULT_CODEC_REGISTRY,
+                new RecordCodecProvider()));
+        var testRecord = new TestRecordJava578(List.of("c"), 1, "a");
+        var document = new BsonDocument();
+        var writer = new BsonDocumentWriter(document);
+        // when
+        codec.encode(writer, testRecord, EncoderContext.builder().build());
+        // then
+        assertEquals(
+                new BsonDocument()
+                        .append("c", new BsonArray(List.of(new BsonString("c"))))
+                        .append("b", new BsonInt32(1))
+                        .append("a", new BsonString("a")),
+                document);
+        // when
+        var decoded = codec.decode(new BsonDocumentReader(document), DecoderContext.builder().build());
+        // then
+        assertEquals(testRecord, decoded);
+    }
+
+//    @Test VAKOTODO
+    public void testPojoJava578() {
+        var codec = CodecRegistries.fromProviders(
+                Bson.DEFAULT_CODEC_REGISTRY,
+                PojoCodecProvider.builder()
+                        .automatic(true)
+                        .build())
+                .get(TestPojoJava578.class);
+        var testPojo = new TestPojoJava578();
+        testPojo.setC(List.of("c"));
+        testPojo.setB(1);
+        testPojo.setA("a");
+        var document = new BsonDocument();
+        var writer = new BsonDocumentWriter(document);
+        // when
+        codec.encode(writer, testPojo, EncoderContext.builder().build());
+        // then
+        assertEquals(
+                new BsonDocument()
+                        .append("c", new BsonArray(List.of(new BsonString("c"))))
+                        .append("b", new BsonInt32(1))
+                        .append("a", new BsonString("a")),
+                document);
+        // when
+        var decoded = codec.decode(new BsonDocumentReader(document), DecoderContext.builder().build());
+        // then
+        assertEquals(testPojo, decoded);
+    }
+
+    @Test
+    public void testRecordWithInterfaceComponent() {
+        var codec = new RecordCodec<>(TestRecordWithInterfaceComponent.class, CodecRegistries.fromProviders(
+                Bson.DEFAULT_CODEC_REGISTRY,
+                new RecordCodecProvider(),
+                PojoCodecProvider.builder()
+                        .automatic(true)
+                        .build()));
+        var testRecord = new TestRecordWithInterfaceComponent(
+                new TestRecordWithInterfaceComponent.A("a"),
+                new TestRecordWithInterfaceComponent.B(true),
+                new TestRecordWithInterfaceComponent.C().setV(1));
+        var document = new BsonDocument();
+        var writer = new BsonDocumentWriter(document);
+        // when
+        codec.encode(writer, testRecord, EncoderContext.builder().build());
+        // then
+        assertEquals(
+                new BsonDocument()
+                        .append("a", new BsonDocument()
+                                .append("v", new BsonString("a")))
+                        .append("b", new BsonDocument()
+                                .append("v", BsonBoolean.TRUE))
+                        .append("c", new BsonDocument()
+                                .append("v", new BsonInt32(1))
+                                .append("_t", new BsonString("C"))),
+                document);
+        // when
+        var decoded = codec.decode(new BsonDocumentReader(document), DecoderContext.builder().build());
+        // then
+        assertEquals(testRecord, decoded);
+    }
+
+    @Test
+    public void testPojoWithInterfaceField() {
+        var codec = CodecRegistries.fromProviders(
+                Bson.DEFAULT_CODEC_REGISTRY,
+                PojoCodecProvider.builder()
+                        .automatic(true)
+                        .build())
+                .get(TestPojoWithInterfaceField.class);
+        var testPojo = new TestPojoWithInterfaceField()
+                .setA(new TestPojoWithInterfaceField.A().setV("a"))
+                .setB(new TestPojoWithInterfaceField.B().setV(true))
+                .setC(new TestPojoWithInterfaceField.C().setV(1));
+        var document = new BsonDocument();
+        var writer = new BsonDocumentWriter(document);
+        // when
+        codec.encode(writer, testPojo, EncoderContext.builder().build());
+        // then
+        assertEquals(
+                new BsonDocument()
+                        .append("a", new BsonDocument()
+                                .append("v", new BsonString("a")))
+                        .append("b", new BsonDocument()
+                                .append("v", BsonBoolean.TRUE))
+                        .append("c", new BsonDocument()
+                                .append("v", new BsonInt32(1))
+                                .append("_t", new BsonString("C"))),
+                document);
+        // when
+        var decoded = codec.decode(new BsonDocumentReader(document), DecoderContext.builder().build());
+        // then
+        assertEquals(testPojo, decoded);
     }
 }
