@@ -24,23 +24,31 @@ import org.bson.BsonReaderMark;
 import org.bson.BsonType;
 import org.bson.BsonValue;
 import org.bson.BsonWriter;
+import org.bson.assertions.Assertions;
 import org.bson.codecs.BsonValueCodec;
 import org.bson.codecs.Codec;
 import org.bson.codecs.DecoderContext;
 import org.bson.codecs.Encoder;
 import org.bson.codecs.EncoderContext;
+import org.bson.codecs.RepresentationConfigurable;
 import org.bson.codecs.configuration.CodecConfigurationException;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.diagnostics.Logger;
 import org.bson.diagnostics.Loggers;
 
 import javax.annotation.Nullable;
+import java.lang.reflect.Type;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static org.bson.assertions.Assertions.assertNotNull;
+import static org.bson.assertions.Assertions.assertNull;
 
 
 final class PojoCodecImpl<T> extends PojoCodec<T> {
@@ -51,13 +59,21 @@ final class PojoCodecImpl<T> extends PojoCodec<T> {
     private final PropertyCodecRegistry propertyCodecRegistry;
     private final DiscriminatorLookup discriminatorLookup;
 
-    PojoCodecImpl(final ClassModel<T> classModel, final CodecRegistry codecRegistry,
-            final List<PropertyCodecProvider> propertyCodecProviders, final DiscriminatorLookup discriminatorLookup) {
+    PojoCodecImpl(final ClassModel<T> classModel, final List<Type> typeArguments, final CodecRegistry codecRegistry,
+            final List<PropertyCodecProvider> propertyCodecProviders, final DiscriminatorLookup discriminatorLookup,
+            @Nullable final Function<Class<?>, ClassModel<?>> classModels) {
         this.classModel = classModel;
         this.registry = codecRegistry;
         this.discriminatorLookup = discriminatorLookup;
         this.propertyCodecRegistry = new PropertyCodecRegistryImpl(this, registry, propertyCodecProviders);
         specialize();
+//        specializeNew(typeArguments, assertNotNull(classModels));
+    }
+
+    PojoCodecImpl(final ClassModel<T> classModel, final CodecRegistry codecRegistry,
+            final List<PropertyCodecProvider> propertyCodecProviders, final DiscriminatorLookup discriminatorLookup) {
+        this(classModel, Collections.emptyList(), codecRegistry, propertyCodecProviders, discriminatorLookup,
+                null);
     }
 
     PojoCodecImpl(final ClassModel<T> classModel, final CodecRegistry codecRegistry,
@@ -261,6 +277,56 @@ final class PojoCodecImpl<T> extends PojoCodec<T> {
                     : new LazyPropertyModelCodec<>(propertyModel, registry, propertyCodecRegistry);
             propertyModel.cachedCodec(codec);
         }
+    }
+
+    private void specializeNew(final List<Type> typeArguments, final Function<Class<?>, ClassModel<?>> classModels) {
+        classModel.getPropertyModels().forEach(propertyModel -> cachePropertyModelCodecNew(
+                typeArguments,
+                propertyModel,
+                registry,
+                propertyCodecRegistry,
+                classModels
+        ));
+    }
+
+    private static <S> void cachePropertyModelCodecNew(
+            final List<Type> typeArguments,
+            final PropertyModel<S> propertyModel,
+            final CodecRegistry codecRegistry,
+            final PropertyCodecRegistry propertyCodecRegistry,
+            final Function<Class<?>, ClassModel<?>> classModels) {
+        assertNull(propertyModel.getCachedCodec());
+        propertyModel.cachedCodec(computeCodec(typeArguments, propertyModel, codecRegistry, propertyCodecRegistry, classModels));
+    }
+
+    private static <S> Codec<S> computeCodec(
+            final List<Type> typeArguments,
+            final PropertyModel<S> propertyModel,
+            final CodecRegistry codecRegistry,
+            final PropertyCodecRegistry propertyCodecRegistry,
+            final Function<Class<?>, ClassModel<?>> classModels) {
+        @SuppressWarnings("unchecked")
+        ClassModel<S> propertyClassModel = (ClassModel<S>) classModels.apply(propertyModel.getTypeData().getType());
+        ClassModel<S> specializedPropertyClassModel = LazyPropertyModelCodec.getSpecializedClassModel(propertyClassModel, propertyModel);
+        Codec<S> codec = null;
+        // VAKOTODO fill `TypeData` additionally with `Type`s either here based on `typeArguments` or in advance?
+        // VAKOTODO read the unparameterized property codec from registry to see if it is a POJO codec
+        // VAKOTODO if it is a POJO codec, create a correctly parameterized codec
+//                new PojoCodecImpl<>(
+//                specializedPropertyClassModel,
+//                propertyModel.getTypeData().getTypeParameters().stream().map(TypeWithTypeParameters::getType).collect(Collectors.toList()),
+//                codecRegistry, );
+        BsonType representation = propertyModel.getBsonRepresentation();
+        if (representation != null) {
+            if (codec instanceof RepresentationConfigurable) {
+                @SuppressWarnings("unchecked")
+                RepresentationConfigurable<S> representationConfigurableCodec = (RepresentationConfigurable<S>) codec;
+                codec = representationConfigurableCodec.withRepresentation(representation);
+            } else {
+                throw new CodecConfigurationException("Codec must implement RepresentationConfigurable to support BsonRepresentation");
+            }
+        }
+        return codec;
     }
 
     private <S, V> boolean areEquivalentTypes(final Class<S> t1, final Class<V> t2) {

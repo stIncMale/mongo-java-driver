@@ -103,7 +103,7 @@ class LazyPropertyModelCodec<T> implements Codec<T> {
         return localCodec;
     }
 
-    private <V> ClassModel<T> getSpecializedClassModel(final ClassModel<T> clazzModel, final PropertyModel<V> propertyModel) {
+    static <T> ClassModel<T> getSpecializedClassModel(final ClassModel<T> clazzModel, final PropertyModel<T> propertyModel) {
         boolean useDiscriminator = propertyModel.useDiscriminator() == null ? clazzModel.useDiscriminator()
                 : propertyModel.useDiscriminator();
         boolean validDiscriminator = clazzModel.getDiscriminatorKey() != null && clazzModel.getDiscriminator() != null;
@@ -136,7 +136,7 @@ class LazyPropertyModelCodec<T> implements Codec<T> {
                 clazzModel.getDiscriminator(), IdPropertyModelHolder.create(clazzModel, concreteIdProperty), concretePropertyModels);
     }
 
-    private <V> PropertyModel<V> getSpecializedPropertyModel(final PropertyModel<V> propertyModel,
+    private static <V> PropertyModel<V> getSpecializedPropertyModel(final PropertyModel<V> propertyModel,
                                                              final List<TypeData<?>> propertyTypeParameters,
                                                              final TypeParameterMap typeParameterMap) {
         TypeData<V> specializedPropertyType = specializeTypeData(propertyModel.getTypeData(), propertyTypeParameters, typeParameterMap);

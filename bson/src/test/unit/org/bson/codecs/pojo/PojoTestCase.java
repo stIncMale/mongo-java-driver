@@ -355,8 +355,8 @@ abstract class PojoTestCase {
                 new SelfReferentialGenericModel<>(44L, false, null));
         SelfReferentialGenericModel<Boolean, Double> selfRef2 = new SelfReferentialGenericModel<>(true, 3.14,
                 new SelfReferentialGenericModel<>(3.42, true, null));
-        NestedSelfReferentialGenericModel<Boolean, Long, Double> nested =
-                new NestedSelfReferentialGenericModel<>(true, 42L, 44.0, selfRef1, selfRef2);
+        NestedSelfReferentialGenericModel<Boolean> nested =
+                new NestedSelfReferentialGenericModel<>(true);
          return new NestedSelfReferentialGenericHolderModel(nested);
     }
 

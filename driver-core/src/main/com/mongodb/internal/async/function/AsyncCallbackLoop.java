@@ -87,4 +87,35 @@ public final class AsyncCallbackLoop implements AsyncCallbackRunnable {
             }
         }
     }
+
+
+
+    public void getVAsync(SingleResultCallback<Integer> callback) {
+
+    }
+    public void doSomethingAsync(SingleResultCallback<Void> callback) {
+
+    }
+
+    public void method(SingleResultCallback<Integer> callback) {
+        getVAsync((v, t1) -> {
+            if (t1 != null) {
+                callback.onResult(null, t1);
+                return;
+            }
+            doSomethingAsync((v0id, t2) -> {
+                if (t2 != null) {
+                    callback.onResult(null, t2);
+                    return;
+                }
+                callback.onResult(v, null);
+            });
+        });
+    }
+
+//    public Integer method() {
+//        Integer v = getV();
+//        doSomething();
+//        return v;
+//    }
 }

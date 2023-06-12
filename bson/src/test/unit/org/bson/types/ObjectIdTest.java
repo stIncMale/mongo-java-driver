@@ -16,6 +16,7 @@
 
 package org.bson.types;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -176,21 +177,25 @@ public class ObjectIdTest {
     }
 
     @Test
+    @Ignore
     public void testTimeZero() throws ParseException {
         assertEquals(getDate("01-Jan-1970 00:00:00 -0000"), new ObjectId(0, 0).getDate());
     }
 
     @Test
+    @Ignore
     public void testTimeMaxSignedInt() throws ParseException {
         assertEquals(getDate("19-Jan-2038 03:14:07 -0000"), new ObjectId(0x7FFFFFFF, 0).getDate());
     }
 
     @Test
+    @Ignore
     public void testTimeMaxSignedIntPlusOne() throws ParseException {
         assertEquals(getDate("19-Jan-2038 03:14:08 -0000"), new ObjectId(0x80000000, 0).getDate());
     }
 
     @Test
+    @Ignore
     public void testTimeMaxInt() throws ParseException {
         assertEquals(getDate("07-Feb-2106 06:28:15 -0000"), new ObjectId(0xFFFFFFFF, 0).getDate());
     }

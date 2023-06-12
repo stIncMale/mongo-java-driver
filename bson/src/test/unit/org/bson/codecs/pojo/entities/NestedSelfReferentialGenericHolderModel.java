@@ -16,24 +16,34 @@
 
 package org.bson.codecs.pojo.entities;
 
+import java.util.List;
 import java.util.Objects;
 
 public final class NestedSelfReferentialGenericHolderModel {
-    private NestedSelfReferentialGenericModel<Boolean, Long, Double> nested;
+    private List<String> list;
+    private NestedSelfReferentialGenericModel<Boolean> nested;
 
     public NestedSelfReferentialGenericHolderModel() {
     }
 
-    public NestedSelfReferentialGenericHolderModel(final NestedSelfReferentialGenericModel<Boolean, Long, Double> nested) {
+    public NestedSelfReferentialGenericHolderModel(final NestedSelfReferentialGenericModel<Boolean> nested) {
         this.nested = nested;
     }
 
-    public NestedSelfReferentialGenericModel<Boolean, Long, Double> getNested() {
+    public NestedSelfReferentialGenericModel<Boolean> getNested() {
         return nested;
     }
 
-    public void setNested(final NestedSelfReferentialGenericModel<Boolean, Long, Double> nested) {
+    public void setNested(final NestedSelfReferentialGenericModel<Boolean> nested) {
         this.nested = nested;
+    }
+
+    public List<String> getList() {
+        return list;
+    }
+
+    public void setList(final List<String> list) {
+        this.list = list;
     }
 
     @Override

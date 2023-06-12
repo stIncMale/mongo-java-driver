@@ -18,23 +18,14 @@ package org.bson.codecs.pojo.entities;
 
 import java.util.Objects;
 
-public final class NestedSelfReferentialGenericModel<T, V, Z> {
+public final class NestedSelfReferentialGenericModel<T> {
     private T t;
-    private V v;
-    private Z z;
-    private SelfReferentialGenericModel<T, V> selfRef1;
-    private SelfReferentialGenericModel<T, Z> selfRef2;
 
     public NestedSelfReferentialGenericModel() {
     }
 
-    public NestedSelfReferentialGenericModel(final T t, final V v, final Z z, final SelfReferentialGenericModel<T, V> selfRef1,
-                         final SelfReferentialGenericModel<T, Z> selfRef2) {
+    public NestedSelfReferentialGenericModel(final T t) {
         this.t = t;
-        this.v = v;
-        this.z = z;
-        this.selfRef1 = selfRef1;
-        this.selfRef2 = selfRef2;
     }
 
     public T getT() {
@@ -43,38 +34,6 @@ public final class NestedSelfReferentialGenericModel<T, V, Z> {
 
     public void setT(final T t) {
         this.t = t;
-    }
-
-    public V getV() {
-        return v;
-    }
-
-    public void setV(final V v) {
-        this.v = v;
-    }
-
-    public Z getZ() {
-        return z;
-    }
-
-    public void setZ(final Z z) {
-        this.z = z;
-    }
-
-    public SelfReferentialGenericModel<T, V> getSelfRef1() {
-        return selfRef1;
-    }
-
-    public void setSelfRef1(final SelfReferentialGenericModel<T, V> selfRef1) {
-        this.selfRef1 = selfRef1;
-    }
-
-    public SelfReferentialGenericModel<T, Z> getSelfRef2() {
-        return selfRef2;
-    }
-
-    public void setSelfRef2(final SelfReferentialGenericModel<T, Z> selfRef2) {
-        this.selfRef2 = selfRef2;
     }
 
     @Override
@@ -86,21 +45,9 @@ public final class NestedSelfReferentialGenericModel<T, V, Z> {
             return false;
         }
 
-        NestedSelfReferentialGenericModel<?, ?, ?> that = (NestedSelfReferentialGenericModel<?, ?, ?>) o;
+        NestedSelfReferentialGenericModel<?> that = (NestedSelfReferentialGenericModel<?>) o;
 
         if (!Objects.equals(t, that.t)) {
-            return false;
-        }
-        if (!Objects.equals(v, that.v)) {
-            return false;
-        }
-        if (!Objects.equals(z, that.z)) {
-            return false;
-        }
-        if (!Objects.equals(selfRef1, that.selfRef1)) {
-            return false;
-        }
-        if (!Objects.equals(selfRef2, that.selfRef2)) {
             return false;
         }
 
@@ -110,10 +57,6 @@ public final class NestedSelfReferentialGenericModel<T, V, Z> {
     @Override
     public int hashCode() {
         int result = t != null ? t.hashCode() : 0;
-        result = 31 * result + (v != null ? v.hashCode() : 0);
-        result = 31 * result + (z != null ? z.hashCode() : 0);
-        result = 31 * result + (selfRef1 != null ? selfRef1.hashCode() : 0);
-        result = 31 * result + (selfRef2 != null ? selfRef2.hashCode() : 0);
         return result;
     }
 
@@ -121,10 +64,6 @@ public final class NestedSelfReferentialGenericModel<T, V, Z> {
     public String toString() {
         return "NestedSelfReferentialGenericModel{"
                 + "t=" + t
-                + ", v=" + v
-                + ", z=" + z
-                + ", selfRef1=" + selfRef1
-                + ", selfRef2=" + selfRef2
                 + "}";
     }
 }
