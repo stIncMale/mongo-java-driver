@@ -166,7 +166,9 @@ public class ClientSessionBinding extends AbstractReferenceCounted implements As
 
     private boolean isConnectionSourcePinningRequired() {
         ClusterType clusterType = wrapped.getCluster().getDescription().getType();
-        return session.hasActiveTransaction() && (clusterType == ClusterType.SHARDED || clusterType == LOAD_BALANCED);
+        return session.hasActiveTransaction() && (clusterType == ClusterType.SHARDED || clusterType == LOAD_BALANCED
+                // VAKOTODO somehow check if gRPC is being used. For now, we assume it is always used
+                || Boolean.valueOf(true));
     }
 
     private class SessionBindingAsyncConnectionSource implements AsyncConnectionSource {

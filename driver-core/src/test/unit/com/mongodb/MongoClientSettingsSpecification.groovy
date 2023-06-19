@@ -306,6 +306,7 @@ class MongoClientSettingsSpecification extends Specification {
                 + '&readConcernLevel=majority'
                 + '&compressors=zlib&zlibCompressionLevel=5'
                 + '&uuidRepresentation=standard'
+                + '&gRPC=false'
         )
         MongoClientSettings settings = MongoClientSettings.builder().applyConnectionString(connectionString).build()
         MongoClientSettings expected = MongoClientSettings.builder()
@@ -414,6 +415,7 @@ class MongoClientSettingsSpecification extends Specification {
                 .compressorList([MongoCompressor.createZlibCompressor().withProperty(MongoCompressor.LEVEL, 5)])
                 .retryWrites(true)
                 .retryReads(true)
+                .streamFactoryFactory(NettyStreamFactoryFactory.builder().build())
 
         def expectedSettings = builder.build()
         def settingsWithDefaultConnectionStringApplied = builder

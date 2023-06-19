@@ -34,6 +34,7 @@ import org.bson.codecs.configuration.CodecRegistry;
 import java.io.Closeable;
 
 import static com.mongodb.assertions.Assertions.notNull;
+import static com.mongodb.internal.connection.ClientMetadataHelper.configureClientMetadataDocument;
 import static com.mongodb.internal.event.EventListenerHelper.getCommandListener;
 
 
@@ -116,8 +117,8 @@ public final class MongoClients {
                 return createWithAsynchronousSocketChannel(settings, mongoDriverInformation);
             }
         } else {
-            return createMongoClient(settings, mongoDriverInformation, getStreamFactory(settings, false),
-                    getStreamFactory(settings, true), null);
+            return createMongoClient(settings, mongoDriverInformation, getStreamFactory(settings, mongoDriverInformation, false),
+                    getStreamFactory(settings, mongoDriverInformation, true), null);
         }
     }
 
@@ -175,8 +176,12 @@ public final class MongoClients {
         return createMongoClient(settings, mongoDriverInformation, streamFactory, heartbeatStreamFactory, null);
     }
 
-    private static StreamFactory getStreamFactory(final MongoClientSettings settings, final boolean isHeartbeat) {
-        StreamFactoryFactory streamFactoryFactory = settings.getStreamFactoryFactory();
+    private static StreamFactory getStreamFactory(
+            final MongoClientSettings settings,
+            @Nullable final MongoDriverInformation mongoDriverInformation,
+            final boolean isHeartbeat) {
+        StreamFactoryFactory streamFactoryFactory = configureClientMetadataDocument(
+                settings.getStreamFactoryFactory(), settings, mongoDriverInformation);
         if (streamFactoryFactory == null) {
             throw new MongoInternalException("should not happen");
         }

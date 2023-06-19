@@ -112,7 +112,7 @@ import static java.util.Collections.unmodifiableList;
  * <li>{@code heartbeatFrequencyMS=ms}: The frequency that the driver will attempt to determine the current state of each server in the
  * cluster.</li>
  * </ul>
- * <p>Replica set configuration:</p>
+ * <p>Replica set configuration (must not be specified when {@code gRPC=true}):</p>
  * <ul>
  * <li>{@code replicaSet=name}: Implies that the hosts given are a seed list, and the driver will attempt to find
  * all members of the set.</li>
@@ -129,11 +129,15 @@ import static java.util.Collections.unmodifiableList;
  * sslInvalidHostNameAllowed option</li>
  * <li>{@code connectTimeoutMS=ms}: How long a connection can take to be opened before timing out.</li>
  * <li>{@code socketTimeoutMS=ms}: How long a receive on a socket can take before timing out.
- * This option is the same as {@link SocketSettings#getReadTimeout(TimeUnit)}.</li>
- * <li>{@code maxIdleTimeMS=ms}: Maximum idle time of a pooled connection. A connection that exceeds this limit will be closed</li>
- * <li>{@code maxLifeTimeMS=ms}: Maximum life time of a pooled connection. A connection that exceeds this limit will be closed</li>
+ * This option is the same as {@link SocketSettings#getReadTimeout(TimeUnit)}.
+ * Must not be specified when {@code gRPC=true}.</li>
+ * <li>{@code maxIdleTimeMS=ms}: Maximum idle time of a pooled connection. A connection that exceeds this limit will be closed.
+ * Must not be specified when {@code gRPC=true}</li>
+ * <li>{@code maxLifeTimeMS=ms}: Maximum life time of a pooled connection. A connection that exceeds this limit will be closed.
+ * Must not be specified when {@code gRPC=true}</li>
+ * <li>{@code gRPC=true|false}: Whether to connect using gRPC.</li>
  * </ul>
- * <p>Connection pool configuration:</p>
+ * <p>Connection pool configuration (must not be specified when {@code gRPC=true}):</p>
  * <ul>
  * <li>{@code maxPoolSize=n}: The maximum number of connections in the connection pool.</li>
  * <li>{@code minPoolSize=n}: The minimum number of connections in the connection pool.</li>
@@ -169,6 +173,7 @@ import static java.util.Collections.unmodifiableList;
  * <ul>
  * <li>The driver adds { wtimeout : ms } to all write commands. Implies {@code safe=true}.</li>
  * <li>Used in combination with {@code w}</li>
+ * <li>Must not be specified when {@code gRPC=true}.</li>
  * </ul>
  * </li>
  * </ul>
@@ -297,6 +302,7 @@ public class ConnectionString {
     private String applicationName;
     private List<MongoCompressor> compressorList;
     private UuidRepresentation uuidRepresentation;
+    private Boolean grpc;
 
     /**
      * Creates a ConnectionString from the given string.
@@ -467,6 +473,32 @@ public class ConnectionString {
         if (requiredReplicaSetName != null && srvMaxHosts != null && srvMaxHosts > 0) {
             throw new IllegalArgumentException("srvMaxHosts can not be specified with replica set name");
         }
+        if (grpc != null && grpc) {
+            if (requiredReplicaSetName != null) {
+                throw new IllegalArgumentException("replicaSet can not be specified with gRPC=true");
+            }
+            if (writeConcern != null && writeConcern.getWTimeout(TimeUnit.MILLISECONDS) != null) {
+                throw new IllegalArgumentException("wTimeoutMS can not be specified with gRPC=true");
+            }
+            if (maxConnectionPoolSize != null) {
+                throw new IllegalArgumentException("maxPoolSize can not be specified with gRPC=true");
+            }
+            if (minConnectionPoolSize != null) {
+                throw new IllegalArgumentException("minPoolSize can not be specified with gRPC=true");
+            }
+            if (maxWaitTime != null) {
+                throw new IllegalArgumentException("waitQueueTimeoutMS can not be specified with gRPC=true");
+            }
+            if (maxConnectionLifeTime != null) {
+                throw new IllegalArgumentException("maxLifeTimeMS can not be specified with gRPC=true");
+            }
+            if (maxConnectionIdleTime != null) {
+                throw new IllegalArgumentException("maxIdleTimeMS can not be specified with gRPC=true");
+            }
+            if (maxConnecting != null) {
+                throw new IllegalArgumentException("maxConnecting can not be specified with gRPC=true");
+            }
+        }
 
         credential = createCredentials(combinedOptionsMaps, userName, password);
         warnOnUnsupportedOptions(combinedOptionsMaps);
@@ -520,6 +552,8 @@ public class ConnectionString {
 
         GENERAL_OPTIONS_KEYS.add("srvmaxhosts");
         GENERAL_OPTIONS_KEYS.add("srvservicename");
+
+        GENERAL_OPTIONS_KEYS.add("grpc");
 
         COMPRESSOR_KEYS.add("compressors");
         COMPRESSOR_KEYS.add("zlibcompressionlevel");
@@ -658,6 +692,9 @@ public class ConnectionString {
                     break;
                 case "srvservicename":
                     srvServiceName = value;
+                    break;
+                case "grpc":
+                    grpc = parseBoolean(value, "grpc");
                     break;
                 default:
                     break;
@@ -1561,6 +1598,19 @@ public class ConnectionString {
         return uuidRepresentation;
     }
 
+    /**
+     * Gets whether gRPC is enabled.
+     *
+     * @return {@code true} if gRPC is enabled, {@code false} if not, {@code null} if the option is not specified.
+     * @see MongoClientSettings#isGrpc()
+     * @since VAKOTODO
+     * @mongodb.server.release VAKOTODO
+     */
+    @Nullable
+    public Boolean isGrpc() {
+        return grpc;
+    }
+
     @Override
     public String toString() {
         return connectionString;
@@ -1604,7 +1654,8 @@ public class ConnectionString {
                 && Objects.equals(compressorList, that.compressorList)
                 && Objects.equals(uuidRepresentation, that.uuidRepresentation)
                 && Objects.equals(srvServiceName, that.srvServiceName)
-                && Objects.equals(srvMaxHosts, that.srvMaxHosts);
+                && Objects.equals(srvMaxHosts, that.srvMaxHosts)
+                && Objects.equals(grpc, that.grpc);
     }
 
     @Override
@@ -1613,6 +1664,6 @@ public class ConnectionString {
                 writeConcern, retryWrites, retryReads, readConcern, minConnectionPoolSize, maxConnectionPoolSize, maxWaitTime,
                 maxConnectionIdleTime, maxConnectionLifeTime, maxConnecting, connectTimeout, socketTimeout, sslEnabled,
                 sslInvalidHostnameAllowed, requiredReplicaSetName, serverSelectionTimeout, localThreshold, heartbeatFrequency,
-                applicationName, compressorList, uuidRepresentation, srvServiceName, srvMaxHosts);
+                applicationName, compressorList, uuidRepresentation, srvServiceName, srvMaxHosts, grpc);
     }
 }

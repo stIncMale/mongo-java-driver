@@ -435,6 +435,7 @@ class ConnectionStringSpecification extends Specification {
         connectionString.getCompressorList() == []
         connectionString.getRetryWritesValue() == null
         connectionString.getRetryReads() == null
+        connectionString.isGrpc() == null
     }
 
     @Unroll
@@ -617,8 +618,10 @@ class ConnectionStringSpecification extends Specification {
                                      + 'secondaryPreferred')        | new ConnectionString('mongodb://localhost/?readPreference='
                                                                                          + 'secondaryPreferred')
         new ConnectionString('mongodb://ross:123@localhost/?'
-                             + 'authMechanism=SCRAM-SHA-1')         | new ConnectionString('mongodb://ross:123@localhost/?'
-                                                                                           + 'authMechanism=SCRAM-SHA-1')
+                             + 'authMechanism=SCRAM-SHA-1'
+                             + '&gRPC=true')         | new ConnectionString('mongodb://ross:123@localhost/?'
+                                                                                           + 'authMechanism=SCRAM-SHA-1'
+                                                                                           + '&gRPC=true')
         new ConnectionString('mongodb://localhost/db.coll'
                              + '?minPoolSize=5;'
                              + 'maxPoolSize=10;'
@@ -631,7 +634,8 @@ class ConnectionStringSpecification extends Specification {
                              + 'safe=false;w=1;wtimeout=2500;'
                              + 'fsync=true;readPreference=primary;'
                              + 'directConnection=true;'
-                             + 'ssl=true')                           |  new ConnectionString('mongodb://localhost/db.coll?minPoolSize=5;'
+                             + 'ssl=true;'
+                             + 'gRPC=false')                           |  new ConnectionString('mongodb://localhost/db.coll?minPoolSize=5;'
                                                                                              + 'maxPoolSize=10;'
                                                                                              + 'waitQueueTimeoutMS=150;'
                                                                                              + 'maxIdleTimeMS=200&maxLifeTimeMS=300'
@@ -641,7 +645,8 @@ class ConnectionStringSpecification extends Specification {
                                                                                              + 'socketTimeoutMS=5500&safe=false&w=1;'
                                                                                              + 'wtimeout=2500;fsync=true'
                                                                                              + '&directConnection=true'
-                                                                                             + '&readPreference=primary;ssl=true')
+                                                                                             + '&readPreference=primary;ssl=true'
+                                                                                             + '&gRPC=false')
     }
 
     def 'should be not equal to another ConnectionString with the different string values'() {
@@ -672,6 +677,7 @@ class ConnectionStringSpecification extends Specification {
         new ConnectionString('mongodb://ross:123@localhost/?'
                            + 'authMechanism=SCRAM-SHA-1')            | new ConnectionString('mongodb://ross:123@localhost/?'
                                                                                           + 'authMechanism=GSSAPI')
+        new ConnectionString('mongodb://localhost/?gRPC=true') | new ConnectionString('mongodb://localhost/?gRPC=false')
     }
 
     def 'should recognize SRV protocol'() {
