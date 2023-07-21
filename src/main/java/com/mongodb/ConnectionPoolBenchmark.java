@@ -106,7 +106,7 @@ public class ConnectionPoolBenchmark {
                 )
                 .include(ConnectionPoolBenchmark.class.getSimpleName() + "\\.connectionCycle")
                 .forks(4)
-                .warmupForks(1)
+                .warmupForks(0)
                 .warmupIterations(4)
                 .warmupTime(seconds(2))
                 .measurementIterations(3)
