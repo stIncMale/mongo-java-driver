@@ -97,7 +97,7 @@ public class VariableExpansionBenchmark {
      * Run:
      * <pre>{@code
      * > mvn clean verify
-     * > java -cp target/benchmarks.jar com.mongodb.ConnectionPoolBenchmark
+     * > java -cp target/benchmarks.jar com.mongodb.VariableExpansionBenchmark
      * }</pre>
      */
     public static void main(String[] args) {

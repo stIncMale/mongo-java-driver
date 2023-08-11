@@ -12,6 +12,7 @@ build
 target
 out
 mongo*.jar
+dependency-reduced-pom.xml
 
 # Eclipse files
 .classpath
