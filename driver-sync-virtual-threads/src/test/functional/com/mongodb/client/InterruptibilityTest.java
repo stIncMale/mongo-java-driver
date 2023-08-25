@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-include ':bson'
-include ':bson-record-codec'
-include ':driver-benchmarks'
-include ':driver-workload-executor'
-include ':driver-core'
-include ':driver-legacy'
-include ':driver-sync'
-include ':driver-sync-virtual-threads'
-include ':driver-reactive-streams'
-include ':bson-kotlin'
-include ':bson-kotlinx'
-include ':driver-kotlin-sync'
-include ':driver-kotlin-coroutine'
-include ':bson-scala'
-include ':driver-scala'
-include 'util:spock'
-include 'util:taglets'
+package com.mongodb.client;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.Executors;
+
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+final class InterruptibilityTest {
+    @Test
+    void name() {
+        assertNull(Executors.newVirtualThreadPerTaskExecutor());
+    }
+
+    private InterruptibilityTest() {
+    }
+}

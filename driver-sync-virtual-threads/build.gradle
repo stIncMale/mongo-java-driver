@@ -14,20 +14,25 @@
  * limitations under the License.
  */
 
-include ':bson'
-include ':bson-record-codec'
-include ':driver-benchmarks'
-include ':driver-workload-executor'
-include ':driver-core'
-include ':driver-legacy'
-include ':driver-sync'
-include ':driver-sync-virtual-threads'
-include ':driver-reactive-streams'
-include ':bson-kotlin'
-include ':bson-kotlinx'
-include ':driver-kotlin-sync'
-include ':driver-kotlin-coroutine'
-include ':bson-scala'
-include ':driver-scala'
-include 'util:spock'
-include 'util:taglets'
+jar.enabled = false
+
+dependencies {
+    testImplementation project(':driver-sync')
+    testImplementation project(':driver-sync').sourceSets.test.output
+}
+
+compileTestGroovy {
+    options.compilerArgs += "--enable-preview"
+}
+
+//tasks.withType(JavaCompile) {
+//    options.compilerArgs += "--enable-preview"
+//}
+//
+//tasks.withType(Test) {
+//    jvmArgs += "--enable-preview"
+//}
+
+//tasks.withType(Test) {
+//    test.onlyIf { javaVersion.isCompatibleWith(javaVersion.VERSION_19) }
+//}

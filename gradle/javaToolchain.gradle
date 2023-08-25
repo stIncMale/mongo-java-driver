@@ -21,7 +21,14 @@ allprojects {
 
     def javaVersion = (findProperty("javaVersion") ?: DEFAULT_JDK_VERSION.toString()).toInteger()
     project.pluginManager.withPlugin("java") {
-        if (!project.pluginManager.hasPlugin("scala")) {
+        if (project.getPath().equals(":driver-sync-virtual-threads")) {
+            logger.info("Compiling ${project.name} using JDK 19")
+            java {
+                toolchain {
+                    languageVersion = JavaLanguageVersion.of(19)
+                }
+            }
+        } else if (!project.pluginManager.hasPlugin("scala")) {
             logger.info("Compiling ${project.name} using JDK${DEFAULT_JDK_VERSION}")
             java {
                 toolchain {
@@ -35,6 +42,11 @@ allprojects {
         tasks.withType(JavaCompile) {
             options.encoding = "UTF-8"
             options.release.set(17)
+        }
+    } else if (project == project(":driver-sync-virtual-threads")) {
+        tasks.withType(JavaCompile) {
+            options.encoding = "UTF-8"
+            options.release.set(19)
         }
     } else if (project in javaMainProjects) {
         tasks.withType(JavaCompile) {
