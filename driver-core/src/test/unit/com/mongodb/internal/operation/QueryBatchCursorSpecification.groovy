@@ -154,19 +154,20 @@ class QueryBatchCursorSpecification extends Specification {
 
     def 'should close cursor after getMore finishes if cursor was closed while getMore was in progress and getMore returns a response'() {
         given:
-        Connection conn = mockConnection(serverVersion)
+        Connection[] connections = [mockConnection(serverVersion), mockConnection(serverVersion)]
         ConnectionSource connSource
         if (serverType == ServerType.LOAD_BALANCER) {
             connSource = mockConnectionSource(SERVER_ADDRESS, serverType)
         } else {
-            connSource = mockConnectionSource(SERVER_ADDRESS, serverType, conn, mockConnection(serverVersion))
+            connSource = mockConnectionSource(SERVER_ADDRESS, serverType, connections)
         }
         List<Document> firstBatch = [new Document()]
         QueryResult<Document> initialResult = new QueryResult<>(NAMESPACE, firstBatch, 1, SERVER_ADDRESS)
         Object getMoreResponse = emptyGetMoreCommandResponse(NAMESPACE, getMoreResponseHasCursor ? 42 : 0)
 
         when:
-        QueryBatchCursor<Document> cursor = new QueryBatchCursor<>(initialResult, 0, 0, 0, new DocumentCodec(), null, connSource, conn)
+        QueryBatchCursor<Document> cursor = new QueryBatchCursor<>(initialResult, 0, 0, 0, new DocumentCodec(), null,
+                connSource, connections[0])
         List<Document> batch = cursor.next()
 
         then:
@@ -176,15 +177,23 @@ class QueryBatchCursorSpecification extends Specification {
         cursor.next()
 
         then:
-        // simulate the user calling `close` while `getMore` is in flight
-        // in LB mode the same connection is used to execute both `getMore` and `killCursors`
-        numberOfInvocations * conn.command(*_) >> {
-            // `getMore` command
-            cursor.close()
-            getMoreResponse
-        } >> {
-            // `killCursors` command
-            null
+        1 * connections[0].command(*_) >>
+                // `getMore` command
+                {
+                    // simulate the user calling `close` while `getMore` is in flight
+                    cursor.close()
+                    getMoreResponse
+                }
+        if (expectKillCursors) {
+            // in LB mode the same connection is used to execute both `getMore` and `killCursors`
+            var connForKillCursor = serverType == ServerType.LOAD_BALANCER ? connections[0] : connections[1];
+            1 * connForKillCursor.command(*_) >>
+                    // `killCursors` command
+                    { null }
+        } else {
+            for (Connection conn : connections) {
+                0 * conn.command(*_)
+            }
         }
 
         then:
@@ -192,15 +201,17 @@ class QueryBatchCursorSpecification extends Specification {
         e.getMessage() == 'Cursor has been closed'
 
         then:
-        conn.getCount() == 1
+        for (Connection conn : connections) {
+            conn.getCount() == 1
+        }
         connSource.getCount() == 1
 
         where:
-        serverVersion                | getMoreResponseHasCursor | serverType                | numberOfInvocations
-        new ServerVersion([5, 0, 0]) | true                     | ServerType.LOAD_BALANCER  | 2
-        new ServerVersion([5, 0, 0]) | false                    | ServerType.LOAD_BALANCER  | 1
-        new ServerVersion([3, 2, 0]) | true                     | ServerType.STANDALONE     | 2
-        new ServerVersion([3, 2, 0]) | false                    | ServerType.STANDALONE     | 1
+        serverVersion                | getMoreResponseHasCursor | serverType                | expectKillCursors
+        new ServerVersion([5, 0, 0]) | true                     | ServerType.LOAD_BALANCER  | true
+        new ServerVersion([5, 0, 0]) | false                    | ServerType.LOAD_BALANCER  | false
+        new ServerVersion([3, 2, 0]) | true                     | ServerType.STANDALONE     | true
+        new ServerVersion([3, 2, 0]) | false                    | ServerType.STANDALONE     | false
     }
 
     def 'should close cursor after getMore finishes if cursor was closed while getMore was in progress and getMore throws exception'() {

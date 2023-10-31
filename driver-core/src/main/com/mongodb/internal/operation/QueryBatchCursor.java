@@ -292,7 +292,7 @@ class QueryBatchCursor<T> implements AggregateResponseBatchCursor<T> {
                 throw translateCommandException(e, serverCursor);
             }
             resourceManager.setServerCursor(nextServerCursor);
-            if (limitReached() || !resourceManager.operable()) {
+            if (limitReached()) {
                 resourceManager.releaseServerAndClientResources(connection);
             }
         });
