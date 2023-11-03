@@ -49,7 +49,6 @@ import static com.mongodb.assertions.Assertions.assertNotNull;
 import static com.mongodb.assertions.Assertions.assertTrue;
 import static com.mongodb.internal.operation.CommandBatchCursorHelper.FIRST_BATCH;
 import static com.mongodb.internal.operation.CommandBatchCursorHelper.MESSAGE_IF_CLOSED_AS_CURSOR;
-import static com.mongodb.internal.operation.CommandBatchCursorHelper.MESSAGE_IF_CONCURRENT_OPERATION;
 import static com.mongodb.internal.operation.CommandBatchCursorHelper.NEXT_BATCH;
 import static com.mongodb.internal.operation.CommandBatchCursorHelper.NO_OP_FIELD_NAME_VALIDATOR;
 import static com.mongodb.internal.operation.CommandBatchCursorHelper.getKillCursorsCommand;
@@ -95,12 +94,7 @@ class AsyncCommandBatchCursor<T> implements AsyncAggregateResponseBatchCursor<T>
 
     @Override
     public void next(final SingleResultCallback<List<T>> callback) {
-        if (isClosed()) {
-            callback.onResult(null, new MongoException(MESSAGE_IF_CLOSED_AS_CURSOR));
-            return;
-        }
-
-        resourceManager.execute((AsyncCallbackSupplier<List<T>>) funcCallback -> {
+        resourceManager.execute(funcCallback -> {
             ServerCursor localServerCursor = resourceManager.getServerCursor();
             boolean serverCursorIsNull = localServerCursor == null;
             List<T> batchResults = emptyList();
@@ -113,12 +107,7 @@ class AsyncCommandBatchCursor<T> implements AsyncAggregateResponseBatchCursor<T>
             } else {
                 getMore(localServerCursor, funcCallback);
             }
-        }).get((r, t) -> {
-            if (resourceManager.getServerCursor() == null) {
-                close();
-            }
-            callback.onResult(r, t);
-        });
+        }, callback);
     }
 
     @Override
@@ -233,14 +222,23 @@ class AsyncCommandBatchCursor<T> implements AsyncAggregateResponseBatchCursor<T>
          * Thread-safe.
          * Executes {@code operation} within the {@link #tryStartOperation()}/{@link #endOperation()} bounds.
          */
-        <R> AsyncCallbackSupplier<R> execute(final AsyncCallbackSupplier<R> callbackSupplier) {
-            return callback -> {
+        <R> void execute(final AsyncCallbackSupplier<R> operation, final SingleResultCallback<R> callback) {
+            AsyncCallbackSupplier<R> guardedOperation = cb -> {
                 if (!tryStartOperation()) {
-                    callback.onResult(null, new IllegalStateException(MESSAGE_IF_CONCURRENT_OPERATION));
+                    cb.onResult(null, new IllegalStateException(MESSAGE_IF_CLOSED_AS_CURSOR));
                 } else {
-                    callbackSupplier.whenComplete(this::endOperation).get(callback);
+                    operation.whenComplete(() -> {
+                        endOperation();
+                        if (getServerCursor() == null) {
+                            // At this point all resources have been released,
+                            // but `isClose` may still be returning `false` if `close` have not been called.
+                            // Self-close to update the state managed by `ResourceManger`, and so that `isClosed` return `true`.
+                            close();
+                        }
+                    }).get(cb);
                 }
             };
+            guardedOperation.get(callback);
         }
 
         @Override
