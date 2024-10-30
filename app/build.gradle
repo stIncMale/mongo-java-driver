@@ -1,0 +1,40 @@
+plugins {
+    id 'application'
+    id 'org.graalvm.buildtools.native' version '0.9.23'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    def mongodbDriverVersion = '5.2.0'
+    implementation("org.mongodb:mongodb-driver-core:${mongodbDriverVersion}")
+    implementation("org.mongodb:mongodb-driver-reactivestreams:${mongodbDriverVersion}")
+    implementation("org.mongodb:mongodb-driver-sync:${mongodbDriverVersion}")
+    implementation("org.mongodb:bson:${mongodbDriverVersion}")
+    implementation("org.mongodb:mongodb-crypt:${mongodbDriverVersion}")
+}
+
+application {
+    mainClass = 'com.lodh.myproduct.myapp.GreetingResource'
+}
+
+// see https://graalvm.github.io/native-build-tools/latest/gradle-plugin.html
+graalvmNative {
+    metadataRepository {
+        enabled = false
+    }
+    binaries {
+        configureEach {
+            buildArgs.add('--strict-image-heap')
+            buildArgs.add('-H:+UnlockExperimentalVMOptions')
+            // see class initialization and other reports in `graalvm/build/native/nativeCompile/reports`
+            buildArgs.add('--diagnostics-mode')
+            // see the "registerResource" entries in the `native-image` built-time output,
+            // informing us on the resources included in the native image being built
+            buildArgs.add('-H:Log=registerResource:5')
+            verbose = true
+        }
+    }
+}
