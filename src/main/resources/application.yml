@@ -1,0 +1,3 @@
+quarkus:
+  mongodb:
+    connection-string: "mongodb://u:p@localhost"
