@@ -52,7 +52,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.mongodb.assertions.Assertions.assertFalse;
 import static com.mongodb.assertions.Assertions.assertTrue;
 import static com.mongodb.assertions.Assertions.isTrue;
 import static com.mongodb.internal.connection.ServerAddressHelper.getSocketAddresses;
@@ -104,31 +103,27 @@ public class TlsChannelStreamFactoryFactory implements StreamFactoryFactory {
 
         static final class SocketRegistration {
             private final SocketChannel socketChannel;
-            private final Runnable attachment;
-            private final AtomicReference<ConnectionRegistrationState> connectionRegistrationState;
+            private final AtomicReference<Runnable> action;
 
-            enum ConnectionRegistrationState {
-                CONNECTING,
-                CONNECTED,
-                TIMEOUT_OUT
-            }
-
-            private SocketRegistration(final SocketChannel socketChannel, final Runnable attachment) {
+            SocketRegistration(final SocketChannel socketChannel, final Runnable action) {
                 this.socketChannel = socketChannel;
-                this.attachment = attachment;
-                this.connectionRegistrationState = new AtomicReference<>(ConnectionRegistrationState.CONNECTING);
+                this.action = new AtomicReference<>(action);
             }
 
-            public boolean markConnectionEstablishmentTimedOut() {
-                return connectionRegistrationState.compareAndSet(
-                        ConnectionRegistrationState.CONNECTING,
-                        ConnectionRegistrationState.TIMEOUT_OUT);
+            boolean tryCancel() {
+                return tryTakeAction() != null;
             }
 
-            public boolean markConnectionEstablishmentCompleted() {
-                return connectionRegistrationState.compareAndSet(
-                        ConnectionRegistrationState.CONNECTING,
-                        ConnectionRegistrationState.CONNECTED);
+            void runIfNotCancelled() {
+                Runnable observedAction = tryTakeAction();
+                if (observedAction != null) {
+                    observedAction.run();
+                }
+            }
+
+            @Nullable
+            private Runnable tryTakeAction() {
+                return action.getAndSet(null);
             }
         }
 
@@ -153,15 +148,7 @@ public class TlsChannelStreamFactoryFactory implements StreamFactoryFactory {
                             selector.select();
                             for (SelectionKey selectionKey : selector.selectedKeys()) {
                                 selectionKey.cancel();
-                                SocketRegistration socketRegistration = (SocketRegistration) selectionKey.attachment();
-
-                                boolean markedCompleted = socketRegistration.markConnectionEstablishmentCompleted();
-                                if (markedCompleted) {
-                                    Runnable runnable = socketRegistration.attachment;
-                                    runnable.run();
-                                } else {
-                                    assertFalse(socketRegistration.socketChannel.isOpen());
-                                }
+                                ((SocketRegistration) selectionKey.attachment()).runIfNotCancelled();
                             }
 
                             for (Iterator<SocketRegistration> iter = pendingRegistrations.iterator(); iter.hasNext();) {
@@ -253,8 +240,7 @@ public class TlsChannelStreamFactoryFactory implements StreamFactoryFactory {
                                                  final SocketChannel socketChannel,
                                                  final int connectTimeoutMs) {
             group.getTimeoutExecutor().schedule(() -> {
-                boolean markedTimedOut = socketRegistration.markConnectionEstablishmentTimedOut();
-                if (markedTimedOut) {
+                if (socketRegistration.tryCancel()) {
                     closeAndTimeout(handler, socketChannel);
                 }
             }, connectTimeoutMs, TimeUnit.MILLISECONDS);
