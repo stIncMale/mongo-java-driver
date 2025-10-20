@@ -67,7 +67,7 @@ public class ClientMetadata {
         this.driverInformationList = new ArrayList<>();
         withLock(readWriteLock.writeLock(), () -> {
             driverInformationList.add(INITIAL_DRIVER_INFORMATION);
-            driverInformationList.addAll(mongoDriverInformation.getDriverInformationList());
+            driverInformationList.addAll(((DefaultMongoDriverInformation) mongoDriverInformation).getDriverInformationList());
             this.clientMetadataBsonDocument = createClientMetadataDocument(applicationName, driverInformationList);
         });
     }
@@ -82,7 +82,8 @@ public class ClientMetadata {
     public void append(final MongoDriverInformation mongoDriverInformationToAppend) {
         withLock(readWriteLock.writeLock(), () -> {
             boolean hasAddedNewData = false;
-            for (DriverInformation driverInformation : mongoDriverInformationToAppend.getDriverInformationList()) {
+            for (DriverInformation driverInformation
+                    : ((DefaultMongoDriverInformation) mongoDriverInformationToAppend).getDriverInformationList()) {
                if (!driverInformationList.contains(driverInformation)) {
                    hasAddedNewData = true;
                    driverInformationList.add(driverInformation);
