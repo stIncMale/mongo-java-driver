@@ -16,6 +16,8 @@
 package com.mongodb.internal.connection;
 
 import com.mongodb.internal.connection.netty.NettyByteBuf;
+import io.netty.buffer.UnpooledByteBufAllocator;
+import org.bson.BsonBinaryWriter;
 import org.bson.ByteBuf;
 import org.bson.ByteBufNIO;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +29,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -39,11 +42,13 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
-public final class CompositeByteBufTest {
+final class CompositeByteBufTest {
 
     @Test
     @SuppressWarnings("ConstantConditions")
@@ -423,5 +428,167 @@ public final class CompositeByteBufTest {
         buf.release();
 
         assertThrows(IllegalStateException.class, buf::get);
+    }
+
+    @ParameterizedTest(name = "{0} complexTest")
+    @MethodSource("bufferProviders")
+    void complexTest(String description, TrackingBufferProvider bufferProvider) {
+        List<ByteBuf> buffers;
+        CompositeByteBuf compositeBuffer;
+        ByteBufBsonDocument bufferBsonDocument;
+        ByteBuf compositeBufferDuplicate;
+        try (ByteBufferBsonOutput bufferBsonOutput = new ByteBufferBsonOutput(bufferProvider)) {
+            try (BsonBinaryWriter bsonBinaryWriter = new BsonBinaryWriter(bufferBsonOutput)) {
+                bsonBinaryWriter.writeStartDocument();
+                bsonBinaryWriter.writeName("k");
+                bsonBinaryWriter.writeInt32(42);
+                bsonBinaryWriter.writeEndDocument();
+                bsonBinaryWriter.flush();
+            }
+            buffers = bufferBsonOutput.getByteBuffers();
+            for (ByteBuf buffer : buffers) {
+                assertTrue(buffer.getReferenceCount() > 0);
+            }
+            compositeBuffer = new CompositeByteBuf(buffers);
+            assertEquals(1, compositeBuffer.getReferenceCount());
+            bufferBsonDocument = ByteBufBsonDocument.createOne(compositeBuffer);
+            compositeBufferDuplicate = compositeBuffer.duplicate();
+            assertEquals(1, compositeBufferDuplicate.getReferenceCount());
+            assertEquals(1, compositeBuffer.getReferenceCount());
+            compositeBuffer.release();
+            assertEquals(0, compositeBuffer.getReferenceCount());
+            bufferProvider.assertAllAvailable();
+            assertEquals(1, compositeBufferDuplicate.getReferenceCount());
+            compositeBufferDuplicate.release();
+            assertEquals(0, compositeBufferDuplicate.getReferenceCount());
+            buffers = bufferBsonOutput.getByteBuffers();
+            for (ByteBuf buffer : buffers) {
+                assertTrue(buffer.getReferenceCount() > 0);
+                buffer.release();
+            }
+            bufferProvider.assertAllAvailable();
+        }
+        for (ByteBuf buffer : buffers) {
+            assertEquals(0, buffer.getReferenceCount());
+        }
+        bufferBsonDocument.toBaseBsonDocument();
+        bufferProvider.assertAllUnavailable(); // this assertion fails "Netty" because of the `bufferBsonDocument = ByteBufBsonDocument.createOne(compositeBuffer)` line
+    }
+
+    @ParameterizedTest(name = "{0} release")
+    @MethodSource("bufferProviders")
+    void release(String description, TrackingBufferProvider bufferProvider) {
+        List<ByteBuf> buffers = asList(bufferProvider.getBuffer(1), bufferProvider.getBuffer(1));
+        CompositeByteBuf compositeByteBuf = new CompositeByteBuf(buffers);
+        for (ByteBuf buffer : buffers) {
+            assertTrue(buffer.getReferenceCount() > 0);
+        }
+        bufferProvider.assertAllAvailable();
+        compositeByteBuf.release();
+        for (ByteBuf buffer : buffers) {
+            assertEquals(0, buffer.getReferenceCount()); // this assertion fails "NIO", "pooled NIO"
+        }
+        bufferProvider.assertAllUnavailable(); // this assertion fails "NIO", "pooled NIO"
+    }
+
+    @ParameterizedTest(name = "{0} asReadOnly")
+    @MethodSource("bufferProviders")
+    void asReadOnly(String description, TrackingBufferProvider bufferProvider) {
+        ByteBuf buffer = bufferProvider.getBuffer(1);
+        ByteBuf readOnlyBuffer = buffer.asReadOnly();
+        assertEquals(1, readOnlyBuffer.getReferenceCount());
+        buffer.release();
+        assertEquals(0, buffer.getReferenceCount());
+        assertEquals(1, readOnlyBuffer.getReferenceCount()); // this assertion fails "Netty"
+        readOnlyBuffer.release();
+        assertEquals(0, readOnlyBuffer.getReferenceCount());
+        bufferProvider.assertAllUnavailable();
+    }
+
+    @ParameterizedTest(name = "{0} duplicate")
+    @MethodSource("bufferProviders")
+    // this test succeeds despite differing from `asReadOnly` only in the method used: `duplicate` vs `asReadOnly`
+    void duplicate(String description, TrackingBufferProvider bufferProvider) {
+        ByteBuf buffer = bufferProvider.getBuffer(1);
+        ByteBuf duplicateBuffer = buffer.duplicate();
+        assertEquals(1, duplicateBuffer.getReferenceCount());
+        buffer.release();
+        assertEquals(0, buffer.getReferenceCount());
+        assertEquals(1, duplicateBuffer.getReferenceCount());
+        duplicateBuffer.release();
+        assertEquals(0, duplicateBuffer.getReferenceCount());
+        bufferProvider.assertAllUnavailable();
+    }
+
+    @ParameterizedTest(name = "{0} duplicateComposite")
+    @MethodSource("bufferProviders")
+    void duplicateComposite(String description, TrackingBufferProvider bufferProvider) {
+        List<ByteBuf> buffers = asList(bufferProvider.getBuffer(1), bufferProvider.getBuffer(1));
+        ByteBuf compositeBuffer = new CompositeByteBuf(buffers);
+        ByteBuf compositeBufferDuplicate = compositeBuffer.duplicate();
+        assertEquals(1, compositeBufferDuplicate.getReferenceCount());
+        compositeBuffer.release();
+        assertEquals(0, compositeBuffer.getReferenceCount());
+        assertEquals(1, compositeBufferDuplicate.getReferenceCount());
+        bufferProvider.assertAllAvailable(); // this assertion fails "Netty"
+        compositeBufferDuplicate.release();
+        assertEquals(0, compositeBufferDuplicate.getReferenceCount());
+        for (ByteBuf buffer : buffers) {
+            assertEquals(0, buffer.getReferenceCount()); // this assertion fails "NIO", "pooled NIO"
+        }
+        bufferProvider.assertAllUnavailable();
+    }
+
+    private static Stream<Arguments> bufferProviders() {
+        TrackingBufferProvider nioBufferProvider = new TrackingBufferProvider(size -> new ByteBufNIO(ByteBuffer.allocate(size)));
+        PowerOfTwoBufferPool bufferPool = new PowerOfTwoBufferPool(1);
+        bufferPool.disablePruning();
+        TrackingBufferProvider pooledNioBufferProvider = new TrackingBufferProvider(bufferPool);
+        TrackingBufferProvider nettyBufferProvider = new TrackingBufferProvider(size -> new NettyByteBuf(UnpooledByteBufAllocator.DEFAULT.buffer(size, size)));
+        return Stream.of(
+                Arguments.of("NIO", nioBufferProvider),
+                Arguments.of("pooled NIO", pooledNioBufferProvider),
+                Arguments.of("Netty", nettyBufferProvider));
+    }
+
+    private static final class TrackingBufferProvider implements BufferProvider {
+        private final BufferProvider decorated;
+        private final ArrayList<ByteBuf> tracked;
+
+        TrackingBufferProvider(BufferProvider decorated) {
+            this.decorated = decorated;
+            tracked = new ArrayList<>();
+        }
+
+        @Override
+        public ByteBuf getBuffer(int size) {
+            ByteBuf result = decorated.getBuffer(size);
+            tracked.add(result);
+            return result;
+        }
+
+        void assertAllAvailable() {
+            for (ByteBuf buffer : tracked) {
+                com.mongodb.assertions.Assertions.assertFalse(tracked.isEmpty());
+                assertTrue(buffer.getReferenceCount() > 0);
+                if (buffer instanceof ByteBufNIO) {
+                    assertNotNull(buffer.asNIO());
+                } else if (buffer instanceof NettyByteBuf) {
+                    assertTrue(((NettyByteBuf) buffer).asByteBuf().refCnt() > 0);
+                }
+            }
+        }
+
+        void assertAllUnavailable() {
+            for (ByteBuf buffer : tracked) {
+                com.mongodb.assertions.Assertions.assertFalse(tracked.isEmpty());
+                assertEquals(0, buffer.getReferenceCount());
+                if (buffer instanceof ByteBufNIO) {
+                    assertNull(buffer.asNIO());
+                } if (buffer instanceof NettyByteBuf) {
+                    assertEquals(0, ((NettyByteBuf) buffer).asByteBuf().refCnt());
+                }
+            }
+        }
     }
 }
