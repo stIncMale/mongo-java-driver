@@ -18,7 +18,9 @@ package com.mongodb.internal.mockito;
 import com.mongodb.lang.Nullable;
 import org.mockito.Answers;
 import org.mockito.Mockito;
+import org.mockito.configuration.MockitoConfiguration;
 import org.mockito.internal.stubbing.answers.ThrowsException;
+import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.OngoingStubbing;
 
 import java.util.function.Consumer;
@@ -28,7 +30,12 @@ import static org.mockito.Mockito.withSettings;
 
 /**
  * Complements {@link Mockito}.
+ *
+ * @deprecated This class should not be used. {@link Answers#RETURNS_SMART_NULLS} covers its functionality in most cases,
+ * and that is probably good enough. {@link Answers#RETURNS_SMART_NULLS} is configured to be the default {@link Answer}
+ * via {@link MockitoConfiguration}.
  */
+@Deprecated
 public final class MongoMockito {
     /**
      * Is equivalent to calling {@link #mock(Class, Consumer)} with a {@code null} {@code tuner}.

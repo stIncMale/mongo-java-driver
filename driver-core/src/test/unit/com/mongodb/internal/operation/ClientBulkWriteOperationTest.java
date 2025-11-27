@@ -33,6 +33,7 @@ import com.mongodb.connection.ServerId;
 import com.mongodb.connection.ServerType;
 import com.mongodb.internal.binding.ConnectionSource;
 import com.mongodb.internal.binding.ReadWriteBinding;
+import com.mongodb.internal.client.model.bulk.AcknowledgedSummaryClientBulkWriteResult;
 import com.mongodb.internal.connection.Connection;
 import com.mongodb.internal.connection.DualMessageSequences;
 import com.mongodb.internal.connection.OperationContext;
@@ -46,7 +47,6 @@ import org.bson.json.JsonReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -56,7 +56,6 @@ import static com.mongodb.MongoClientSettings.getDefaultCodecRegistry;
 import static com.mongodb.client.model.bulk.ClientReplaceOneOptions.clientReplaceOneOptions;
 import static java.util.Collections.singletonList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -67,11 +66,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ClientBulkWriteOperationTest {
     private static final MongoNamespace NAMESPACE = new MongoNamespace("testDb.testCol");
-    @Mock(answer = Answers.RETURNS_SMART_NULLS)
+    @Mock
     private Connection connection;
-    @Mock(answer = Answers.RETURNS_SMART_NULLS)
+    @Mock
     private ConnectionSource connectionSource;
-    @Mock(answer = Answers.RETURNS_SMART_NULLS)
+    @Mock
     private ReadWriteBinding binding;
 
     @BeforeEach
@@ -126,12 +125,7 @@ class ClientBulkWriteOperationTest {
         ClientBulkWriteResult result = op.execute(binding, ClusterFixture.OPERATION_CONTEXT);
 
         //then
-        assertEquals(0, result.getInsertedCount());
-        assertEquals(1, result.getUpsertedCount());
-        assertEquals(0, result.getMatchedCount());
-        assertEquals(0, result.getModifiedCount());
-        assertEquals(0, result.getDeletedCount());
-        assertFalse(result.getVerboseResults().isPresent());
+        assertEquals(new AcknowledgedSummaryClientBulkWriteResult(0, 1, 0, 0, 0), result);
     }
 
     /**

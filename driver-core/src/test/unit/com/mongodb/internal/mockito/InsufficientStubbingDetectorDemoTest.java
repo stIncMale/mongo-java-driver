@@ -20,6 +20,7 @@ import com.mongodb.internal.operation.ListCollectionsOperation;
 import org.bson.BsonDocument;
 import org.bson.codecs.BsonDocumentCodec;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.mockito.internal.stubbing.answers.ThrowsException;
@@ -38,6 +39,7 @@ final class InsufficientStubbingDetectorDemoTest {
     }
 
     @Test
+    @Disabled("see MongoMockito for the reason this test is disabled")
     void mockObjectWithDefaultAnswer() {
         ReadBinding binding = Mockito.mock(ReadBinding.class);
         assertThrows(NullPointerException.class, () -> operation.execute(binding, OPERATION_CONTEXT));
