@@ -1114,28 +1114,43 @@ public abstract class AbstractClientSideOperationsTimeoutProseTest {
     }
 
     @AfterEach
-    public void tearDown() throws InterruptedException {
-        ClusterFixture.disableFailPoint(FAIL_COMMAND_NAME);
-        if (collectionHelper != null) {
-            collectionHelper.drop();
-            filesCollectionHelper.drop();
-            chunksCollectionHelper.drop();
-            commandListener.reset();
-            try {
-                ServerHelper.checkPool(getPrimary());
-            } catch (InterruptedException e) {
-                // ignore
-            }
-        }
-
-        if (executor != null) {
-            executor.shutdownNow();
-            //noinspection ResultOfMethodCallIgnored
-            executor.awaitTermination(MAX_VALUE, NANOSECONDS);
-        }
-
-        if (!isAsync()) {
-            ExponentialBackoff.clearTestJitterSupplier();
+    @SuppressWarnings("try")
+    public void tearDown() throws Exception {
+        try (AutoCloseable clearTestJitterSupplier = () -> {
+                if (!isAsync()) {
+                    ExponentialBackoff.clearTestJitterSupplier();
+                }
+            };
+            AutoCloseable shutdownExecutor = () -> {
+                if (executor != null) {
+                    executor.shutdownNow();
+                    //noinspection ResultOfMethodCallIgnored
+                    executor.awaitTermination(MAX_VALUE, NANOSECONDS);
+                }
+            };
+            AutoCloseable checkPool = () -> ServerHelper.checkPool(getPrimary());
+            AutoCloseable resetCommandListener = () -> {
+                if (commandListener != null) {
+                    commandListener.reset();
+                }
+            };
+            AutoCloseable dropChunksCollectionHelper = () -> {
+                if (chunksCollectionHelper != null) {
+                    chunksCollectionHelper.drop();
+                }
+            };
+            AutoCloseable dropFilesCollectionHelper = () -> {
+                if (filesCollectionHelper != null) {
+                    filesCollectionHelper.drop();
+                }
+            };
+            AutoCloseable dropCollectionHelper = () -> {
+                if (collectionHelper != null) {
+                    collectionHelper.drop();
+                }
+            };
+            AutoCloseable disableFailPoint = () -> ClusterFixture.disableFailPoint(FAIL_COMMAND_NAME)) {
+            // empty
         }
     }
 
