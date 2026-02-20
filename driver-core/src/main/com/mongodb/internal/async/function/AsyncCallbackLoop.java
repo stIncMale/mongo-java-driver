@@ -41,7 +41,7 @@ import java.util.function.Supplier;
 public final class AsyncCallbackLoop implements AsyncCallbackRunnable {
     private final LoopState state;
     private final AsyncCallbackRunnable body;
-    private final ThreadLocal<SameThreadDetectionStatus> sameThreadDetector;
+    private final ThreadLocal<IterationResult> iterationResult;
 
     /**
      * @param state The {@link LoopState} to be deemed as initial for the purpose of the new {@link AsyncCallbackLoop}.
@@ -50,12 +50,12 @@ public final class AsyncCallbackLoop implements AsyncCallbackRunnable {
     public AsyncCallbackLoop(final LoopState state, final AsyncCallbackRunnable body) {
         this.body = body;
         this.state = state;
-        sameThreadDetector = ThreadLocal.withInitial(() -> SameThreadDetectionStatus.NEGATIVE);
+        iterationResult = ThreadLocal.withInitial(() -> IterationResult.UNKNOWN);
     }
 
     @Override
     public void run(final SingleResultCallback<Void> callback) {
-        run(false, callback);
+        run(true, callback);
     }
 
     /**
@@ -97,72 +97,41 @@ public final class AsyncCallbackLoop implements AsyncCallbackRunnable {
      * (that is, completion of one iteration happens-before initiation of the next one)
      * regardless of them being executed synchronously or asynchronously with the method that initiated them.
      *
-     * <p>Initiating any but the {@linkplain LoopState#isFirstIteration() first} iteration is done using trampolining,
-     * which allows us to do it iteratively rather than recursively, if iterations are executed synchronously,
+     * <p>Iterations are executed using trampolining, which results in iterative execution rather than a recursive one,
      * and ensures stack usage does not increase with the number of iterations.
      *
-     * @return {@code true} iff it is known that another iteration must be initiated.
-     * This information is used only for trampolining, and is available only if the iteration executed synchronously.
-     *
-     * <p>It is impossible to detect whether an iteration is executed synchronously.
-     * It is, however, possible to detect whether an iteration is executed in the same thread as the method that initiated it,
-     * and we use this as a proxy indicator of synchronous execution. Unfortunately, this means we do not support / behave incorrectly
-     * if an iteration is executed synchronously but in a thread different from the one in which the method that
-     * initiated the iteration was invoked.
-     *
-     * <p>The above limitation should not be a problem in practice:
-     * <ul>
-     *     <li>the only way to execute an iteration synchronously but in a different thread is to block the thread that
-     *     initiated the iteration by waiting for completion of the iteration by that other thread;</li>
-     *     <li>blocking a thread is forbidden in asynchronous code, and we do not do it;</li>
-     *     <li>therefore, we would not have an iteration that is executed synchronously but in a different thread.</li>
-     * </ul>
+     * @return {@code true} iff another iteration must be initiated in the current thread.
      */
-    boolean run(final boolean trampolining, final SingleResultCallback<Void> afterLoopCallback) {
-        // The `trampoliningResult` variable must be used only if the initiated iteration is executed synchronously with
-        // the current method, which must be detected separately.
-        //
-        // It may be tempting to detect whether the iteration was executed synchronously by reading from the variable
-        // and observing a write that is part of the callback execution. However, if the iteration is executed asynchronously with
-        // the current method, then the aforementioned conflicting write and read actions are not ordered by
-        // the happens-before relation, the execution contains a data race and the read is allowed to observe the write.
-        // If such observation happens when the iteration is executed asynchronously, then we have a false positive.
-        // Furthermore, depending on the nature of the value read, it may not be trustworthy.
-        //
-        // Making `trampoliningResult` a `volatile`, or even making it an `AtomicReference`/`AtomicInteger` and calling `compareAndSet`
-        // does not resolve the issue: it gets rid of the data race, but still leave us with a race condition
-        // that allows for false positives.
-        boolean[] trampoliningResult = {false};
-        sameThreadDetector.set(SameThreadDetectionStatus.PROBING);
-        body.run((r, t) -> {
-            if (completeIfNeeded(afterLoopCallback, r, t)) {
-                // Bounce if we are trampolining and the iteration was executed synchronously,
-                // trampolining completes and so is the loop;
-                // otherwise, the loop simply completes.
-                return;
-            }
-            if (trampolining) {
-                boolean sameThread = sameThreadDetector.get().equals(SameThreadDetectionStatus.PROBING);
-                if (sameThread) {
-                    // Bounce if we are trampolining and the iteration was executed synchronously;
-                    // otherwise proceed to initiate trampolining.
-                    sameThreadDetector.set(SameThreadDetectionStatus.POSITIVE);
-                    trampoliningResult[0] = true;
-                    return;
-                } else {
-                    sameThreadDetector.remove();
-                }
-            }
-            // initiate trampolining
-            boolean anotherIterationNeeded;
-            do {
-                anotherIterationNeeded = run(true, afterLoopCallback);
-            } while (anotherIterationNeeded);
-        });
+    boolean run(final boolean firstIteration, final SingleResultCallback<Void> afterLoopCallback) {
         try {
-            return sameThreadDetector.get().equals(SameThreadDetectionStatus.POSITIVE) && trampoliningResult[0];
+            if (!firstIteration) {
+                iterationResult.set(IterationResult.NEEDED);
+            }
+            body.run((r, t) -> { // this callback can be trivially reused, making the iteration garbage-free
+                if (completeIfNeeded(afterLoopCallback, r, t)) {
+                    // we have just completed the last iteration, the loop is complete
+                    iterationResult.remove();
+                    return;
+                }
+                if (iterationResult.get().equals(IterationResult.NEEDED)) {
+                    // Bounce if we are trampolining and the iteration was completed by the same thread that initiated it;
+                    // otherwise proceed to initiate trampolining.
+                    iterationResult.set(IterationResult.INITIATE_ANOTHER_IN_THE_SAME_THREAD);
+                    return;
+                }
+                try {
+                    // initiate trampolining
+                    boolean continueTrampolining;
+                    do {
+                        continueTrampolining = run(false, afterLoopCallback);
+                    } while (continueTrampolining);
+                } finally {
+                    iterationResult.remove();
+                }
+            });
+            return iterationResult.get().equals(IterationResult.INITIATE_ANOTHER_IN_THE_SAME_THREAD);
         } finally {
-            sameThreadDetector.remove();
+            iterationResult.remove();
         }
     }
 
@@ -192,9 +161,9 @@ public final class AsyncCallbackLoop implements AsyncCallbackRunnable {
         }
     }
 
-    private enum SameThreadDetectionStatus {
-        NEGATIVE,
-        PROBING,
-        POSITIVE
+    private enum IterationResult {
+        UNKNOWN,
+        NEEDED,
+        INITIATE_ANOTHER_IN_THE_SAME_THREAD
     }
 }
