@@ -314,7 +314,7 @@ class InternalStreamConnectionSpecification extends Specification {
         connection.isClosed()
     }
 
-    def 'should throw MongoInterruptedException and leave the interrupt status set when Stream.write throws InterruptedIOException'() {
+    def 'should throw MongoInterruptedException and leave interrupted status set when Stream.write throws InterruptedIOException'() {
         given:
         stream.write(_, _) >> { throw new InterruptedIOException() }
         def connection = getOpenedConnection()
@@ -329,7 +329,7 @@ class InternalStreamConnectionSpecification extends Specification {
         connection.isClosed()
     }
 
-    def 'should throw MongoInterruptedException and leave the interrupt status unset when Stream.write throws InterruptedIOException'() {
+    def 'should throw MongoInterruptedException and leave interrupted status unset when Stream.write throws InterruptedIOException'() {
         given:
         stream.write(_, _) >> { throw new InterruptedIOException() }
         def connection = getOpenedConnection()
@@ -343,7 +343,7 @@ class InternalStreamConnectionSpecification extends Specification {
         connection.isClosed()
     }
 
-    def 'should throw MongoInterruptedException and leave the interrupt status set when Stream.write throws ClosedByInterruptException'() {
+    def 'should throw MongoInterruptedException and leave interrupted status set when Stream.write throws ClosedByInterruptException'() {
         given:
         stream.write(_, _) >> { throw new ClosedByInterruptException() }
         def connection = getOpenedConnection()
@@ -386,7 +386,7 @@ class InternalStreamConnectionSpecification extends Specification {
         connection.isClosed()
     }
 
-    def 'should throw MongoInterruptedException and leave the interrupt status set when Stream.read throws InterruptedIOException'() {
+    def 'should throw MongoInterruptedException and leave interrupted status set when Stream.read throws InterruptedIOException'() {
         given:
         stream.read(_, _) >> { throw new InterruptedIOException() }
         def connection = getOpenedConnection()
@@ -401,7 +401,7 @@ class InternalStreamConnectionSpecification extends Specification {
         connection.isClosed()
     }
 
-    def 'should throw MongoInterruptedException and leave the interrupt status unset when Stream.read throws InterruptedIOException'() {
+    def 'should throw MongoInterruptedException and leave interrupted status unset when Stream.read throws InterruptedIOException'() {
         given:
         stream.read(_, _) >> { throw new InterruptedIOException() }
         def connection = getOpenedConnection()
@@ -415,7 +415,7 @@ class InternalStreamConnectionSpecification extends Specification {
         connection.isClosed()
     }
 
-    def 'should throw MongoInterruptedException and leave the interrupt status set when Stream.read throws ClosedByInterruptException'() {
+    def 'should throw MongoInterruptedException and leave interrupted status set when Stream.read throws ClosedByInterruptException'() {
         given:
         stream.read(_, _) >> { throw new ClosedByInterruptException() }
         def connection = getOpenedConnection()
