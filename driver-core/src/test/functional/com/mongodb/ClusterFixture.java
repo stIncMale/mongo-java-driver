@@ -66,6 +66,7 @@ import com.mongodb.internal.operation.CommandReadOperation;
 import com.mongodb.internal.operation.DropDatabaseOperation;
 import com.mongodb.internal.operation.ReadOperation;
 import com.mongodb.internal.operation.WriteOperation;
+import com.mongodb.internal.thread.AsyncClientExecutor;
 import com.mongodb.lang.Nullable;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -205,7 +206,7 @@ public final class ClusterFixture {
     }
 
     public static final InternalOperationContextFactory OPERATION_CONTEXT_FACTORY =
-            new InternalOperationContextFactory(TIMEOUT_SETTINGS, getServerApi());
+            new InternalOperationContextFactory(TIMEOUT_SETTINGS, getServerApi(), AsyncClientExecutor.unimplemented());
 
     public static OperationContext createOperationContext(final TimeoutSettings timeoutSettings) {
         return new OperationContext(
@@ -449,7 +450,7 @@ public final class ClusterFixture {
         return new DefaultClusterFactory().createCluster(ClusterSettings.builder().hosts(asList(getPrimary())).build(),
                 ServerSettings.builder().build(),
                 ConnectionPoolSettings.builder().maxSize(1).build(), InternalConnectionPoolSettings.builder().build(),
-                TIMEOUT_SETTINGS.connectionOnly(), streamFactory, TIMEOUT_SETTINGS.connectionOnly(), streamFactory, credential,
+                TIMEOUT_SETTINGS.connectionOnly(), streamFactory, TIMEOUT_SETTINGS.connectionOnly(), streamFactory, AsyncClientExecutor.unimplemented(), credential,
                 LoggerSettings.builder().build(), null, null, null, Collections.emptyList(), getServerApi(), null);
     }
 
@@ -461,7 +462,7 @@ public final class ClusterFixture {
                 InternalConnectionPoolSettings.builder().build(), TimeoutSettings.create(mongoClientSettings).connectionOnly(),
                 streamFactory, TimeoutSettings.createHeartbeatSettings(mongoClientSettings).connectionOnly(),
                 new SocketStreamFactory(new DefaultInetAddressResolver(), SocketSettings.builder().readTimeout(5, SECONDS).build(),
-                        getSslSettings(connectionString)),
+                        getSslSettings(connectionString)), AsyncClientExecutor.unimplemented(),
                 connectionString.getCredential(),
                 LoggerSettings.builder().build(), null, null, null,
                 connectionString.getCompressorList(), getServerApi(), null);
