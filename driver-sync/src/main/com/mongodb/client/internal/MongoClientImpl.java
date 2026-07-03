@@ -36,19 +36,16 @@ import com.mongodb.client.model.bulk.ClientBulkWriteOptions;
 import com.mongodb.client.model.bulk.ClientBulkWriteResult;
 import com.mongodb.client.model.bulk.ClientNamespacedWriteModel;
 import com.mongodb.connection.ClusterDescription;
-import com.mongodb.connection.SocketSettings;
 import com.mongodb.internal.TimeoutSettings;
 import com.mongodb.internal.VisibleForTesting;
 import com.mongodb.internal.connection.ClientMetadata;
 import com.mongodb.internal.connection.Cluster;
-import com.mongodb.internal.connection.DefaultClusterFactory;
-import com.mongodb.internal.connection.InternalConnectionPoolSettings;
-import com.mongodb.internal.connection.StreamFactory;
 import com.mongodb.internal.connection.StreamFactoryFactory;
 import com.mongodb.internal.diagnostics.logging.Logger;
 import com.mongodb.internal.diagnostics.logging.Loggers;
 import com.mongodb.internal.session.ServerSessionPool;
 import com.mongodb.internal.observability.micrometer.TracingManager;
+import com.mongodb.internal.thread.AsyncClientExecutor;
 import com.mongodb.lang.Nullable;
 import org.bson.BsonDocument;
 import org.bson.Document;
@@ -61,7 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.mongodb.assertions.Assertions.notNull;
 import static com.mongodb.client.internal.Crypts.createCrypt;
-import static com.mongodb.internal.event.EventListenerHelper.getCommandListener;
+import static com.mongodb.internal.VisibleForTesting.AccessModifier.PRIVATE;
 import static java.lang.String.format;
 import static org.bson.codecs.configuration.CodecRegistries.withUuidRepresentation;
 
@@ -75,23 +72,23 @@ public final class MongoClientImpl implements MongoClient {
     private final MongoDriverInformation mongoDriverInformation;
     private final MongoClusterImpl delegate;
     private final AtomicBoolean closed;
-    private final AutoCloseable externalResourceCloser;
+    private final StreamFactoryFactory streamFactoryFactory;
 
     public MongoClientImpl(final Cluster cluster,
                            final MongoClientSettings settings,
                            final MongoDriverInformation mongoDriverInformation,
-                           @Nullable final AutoCloseable externalResourceCloser) {
-        this(cluster, mongoDriverInformation, settings, externalResourceCloser, null);
+                           final StreamFactoryFactory streamFactoryFactory) {
+        this(cluster, mongoDriverInformation, settings, streamFactoryFactory, null);
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.AccessModifier.PRIVATE)
+    @VisibleForTesting(otherwise = PRIVATE)
     public MongoClientImpl(final Cluster cluster,
                             final MongoDriverInformation mongoDriverInformation,
                             final MongoClientSettings settings,
-                            @Nullable final AutoCloseable externalResourceCloser,
+                            final StreamFactoryFactory streamFactoryFactory,
                             @Nullable final OperationExecutor operationExecutor) {
 
-        this.externalResourceCloser = externalResourceCloser;
+        this.streamFactoryFactory = streamFactoryFactory;
         this.settings = notNull("settings", settings);
         this.mongoDriverInformation = mongoDriverInformation;
         AutoEncryptionSettings autoEncryptionSettings = settings.getAutoEncryptionSettings();
@@ -100,15 +97,17 @@ public final class MongoClientImpl implements MongoClient {
                     + SynchronousContextProvider.class.getName() + " when using the synchronous driver");
         }
 
+        AsyncClientExecutor clientExecutor = streamFactoryFactory.getClientExecutor();
         this.delegate = new MongoClusterImpl(autoEncryptionSettings, cluster,
                                              withUuidRepresentation(settings.getCodecRegistry(), settings.getUuidRepresentation()),
                                              (SynchronousContextProvider) settings.getContextProvider(),
                                              autoEncryptionSettings == null ? null : createCrypt(settings, autoEncryptionSettings), this,
                                              operationExecutor, settings.getReadConcern(), settings.getReadPreference(), settings.getRetryReads(),
                                              settings.getRetryWrites(), settings.getEnableOverloadRetargeting(), settings.getServerApi(),
-                                             new ServerSessionPool(cluster, TimeoutSettings.create(settings), settings.getServerApi()),
+                                             new ServerSessionPool(cluster, clientExecutor, TimeoutSettings.create(settings), settings.getServerApi()),
                                              TimeoutSettings.create(settings), settings.getUuidRepresentation(),
-                                             settings.getWriteConcern(), new TracingManager(settings.getObservabilitySettings()));
+                                             settings.getWriteConcern(), clientExecutor,
+                                             new TracingManager(settings.getObservabilitySettings()));
         this.closed = new AtomicBoolean();
 
         BsonDocument clientMetadataDocument = delegate.getCluster().getClientMetadata().getBsonDocument();
@@ -124,12 +123,10 @@ public final class MongoClientImpl implements MongoClient {
             }
             delegate.getServerSessionPool().close();
             delegate.getCluster().close();
-            if (externalResourceCloser != null) {
-                try {
-                    externalResourceCloser.close();
-                } catch (Exception e) {
-                    LOGGER.warn("Exception closing resource", e);
-                }
+            try {
+                streamFactoryFactory.close();
+            } catch (Exception e) {
+                LOGGER.warn("Exception closing resource", e);
             }
         }
     }
@@ -167,6 +164,7 @@ public final class MongoClientImpl implements MongoClient {
     }
 
     @Override
+    @Nullable
     public Long getTimeout(final TimeUnit timeUnit) {
         return delegate.getTimeout(timeUnit);
     }
@@ -310,27 +308,6 @@ public final class MongoClientImpl implements MongoClient {
         return delegate.bulkWrite(clientSession, clientWriteModels, options);
     }
 
-    private static Cluster createCluster(final MongoClientSettings settings,
-                                         @Nullable final MongoDriverInformation mongoDriverInformation,
-                                         final StreamFactory streamFactory, final StreamFactory heartbeatStreamFactory) {
-        notNull("settings", settings);
-        return new DefaultClusterFactory().createCluster(settings.getClusterSettings(), settings.getServerSettings(),
-                settings.getConnectionPoolSettings(), InternalConnectionPoolSettings.builder().build(),
-                TimeoutSettings.create(settings), streamFactory,
-                TimeoutSettings.createHeartbeatSettings(settings), heartbeatStreamFactory,
-                settings.getCredential(), settings.getLoggerSettings(), getCommandListener(settings.getCommandListeners()),
-                settings.getApplicationName(), mongoDriverInformation, settings.getCompressorList(), settings.getServerApi(),
-                settings.getDnsClient());
-    }
-
-    private static StreamFactory getStreamFactory(
-            final StreamFactoryFactory streamFactoryFactory,
-            final MongoClientSettings settings,
-            final boolean isHeartbeat) {
-        SocketSettings socketSettings = isHeartbeat ? settings.getHeartbeatSocketSettings() : settings.getSocketSettings();
-        return streamFactoryFactory.create(socketSettings, settings.getSslSettings());
-    }
-
     public Cluster getCluster() {
         return delegate.getCluster();
     }
@@ -353,5 +330,12 @@ public final class MongoClientImpl implements MongoClient {
 
     public MongoDriverInformation getMongoDriverInformation() {
         return mongoDriverInformation;
+    }
+
+    /**
+     * @see StreamFactoryFactory#getClientExecutor()
+     */
+    public AsyncClientExecutor getClientExecutor() {
+        return streamFactoryFactory.getClientExecutor();
     }
 }

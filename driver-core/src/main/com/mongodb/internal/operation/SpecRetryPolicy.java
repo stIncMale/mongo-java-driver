@@ -31,6 +31,7 @@ import com.mongodb.internal.connection.OperationContext;
 import com.mongodb.internal.connection.OperationContext.ServerDeprioritization;
 import com.mongodb.lang.Nullable;
 
+import java.time.Duration;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Set;
@@ -176,7 +177,7 @@ final class SpecRetryPolicy implements RetryPolicy {
         boolean retry = retryableError && !maxAttemptsReached;
         Decision decision = new Decision(
                 decideProspectiveFailedResult(retryContext.getProspectiveFailedResult().orElse(null), attemptFailedResult),
-                retry ? new RetryAttemptInfo() : null);
+                retry ? new RetryAttemptInfo(Duration.ZERO) : null);
         resetWriteRetryRequirementsInfo();
         return decision;
     }
