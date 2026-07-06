@@ -38,8 +38,8 @@ import static com.mongodb.assertions.Assertions.notNull;
 @Beta(Reason.CLIENT)
 public interface SearchCollector extends Bson {
     /**
-     * Returns a {@link SearchCollector} that groups results by values or ranges in the specified faceted fields and returns the count
-     * for each of those groups.
+     * Returns a {@link SearchCollector} that groups the results of a search based on the specified operator
+     * by values or ranges in the specified faceted fields, and returns the count for each of those groups.
      *
      * @param operator The search operator to use.
      * @param facets The non-empty facet definitions.
@@ -55,11 +55,8 @@ public interface SearchCollector extends Bson {
     }
 
     /**
-     * Returns a {@link SearchCollector} that groups results by values or ranges in the specified faceted fields and returns the count
-     * for each of those groups, faceting over the entire collection.
-     * <p>
-     * Unlike {@link #facet(SearchOperator, Iterable)}, this method omits the search operator, so the facets are computed
-     * across all documents in the collection.</p>
+     * Returns a {@link SearchCollector} that groups all the input documents
+     * by values or ranges in the specified faceted fields, and returns the count for each of those groups.
      *
      * @param facets The non-empty facet definitions.
      * @return The requested {@link SearchCollector}.
