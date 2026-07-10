@@ -180,9 +180,10 @@ final class AsyncOperationHelper {
             final Decoder<D> decoder,
             final CommandReadTransformerAsync<D, T> transformer,
             final boolean retryReadsSetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting,
             final SingleResultCallback<T> callback) {
         executeRetryableReadAsync(binding, operationContext, binding::getReadConnectionSource, database, commandCreator,
-                                  decoder, transformer, retryReadsSetting, callback);
+                                  decoder, transformer, retryReadsSetting, maxAdaptiveRetriesSetting, callback);
     }
 
     static <D, T> void executeRetryableReadAsync(
@@ -194,8 +195,12 @@ final class AsyncOperationHelper {
             final Decoder<D> decoder,
             final CommandReadTransformerAsync<D, T> transformer,
             final boolean retryReadsSetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting,
             final SingleResultCallback<T> callback) {
-        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(EnumSet.of(READ), retryReadsSetting, isReadRetryRequirementsMet(retryReadsSetting, operationContext), operationContext);
+        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
+                EnumSet.of(READ),
+                retryReadsSetting, maxAdaptiveRetriesSetting,
+                isReadRetryRequirementsMet(retryReadsSetting, operationContext), operationContext);
         binding.retain();
         AsyncCallbackSupplier<T> asyncRead = decorateWithRetriesAsync(retryControl, operationContext,
                 (AsyncCallbackSupplier<T>) funcCallback ->
@@ -259,11 +264,15 @@ final class AsyncOperationHelper {
             final CommandWriteTransformerAsync<T, R> transformer,
             final Function<BsonDocument, BsonDocument> retryCommandModifier,
             final boolean effectiveRetryWritesSetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting,
             final SingleResultCallback<R> callback) {
         beginAsync().<R>thenSupply(c -> {
             binding.retain();
             MutableValue<BsonDocument> command = new MutableValue<>();
-            RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(EnumSet.of(WRITE), effectiveRetryWritesSetting, effectiveRetryWritesSetting, operationContext);
+            RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
+                    EnumSet.of(WRITE),
+                    effectiveRetryWritesSetting, maxAdaptiveRetriesSetting,
+                    effectiveRetryWritesSetting, operationContext);
             AsyncCallbackSupplier<R> retryingWrite = decorateWithRetriesAsync(retryControl, operationContext, supplierCallback -> {
                 beginAsync().<R>thenSupply(withSourceAndConnectionCallback -> {
                     boolean firstAttempt = retryControl.isFirstAttempt();

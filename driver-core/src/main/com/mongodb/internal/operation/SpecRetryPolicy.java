@@ -87,6 +87,7 @@ final class SpecRetryPolicy implements RetryPolicy {
     SpecRetryPolicy(
             final Set<Descriptor> descriptors,
             final boolean effectiveRetrySetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting,
             final boolean retryRequirementsMaybeMet,
             final ExplicitMaxRetries explicitMaxRetries,
             final ServerDeprioritization serverDeprioritization) {
@@ -131,7 +132,7 @@ final class SpecRetryPolicy implements RetryPolicy {
      * The information gathered via this method is reset after each invocation of {@link #onAttemptFailure(RetryContext, Throwable)}.
      *
      * @param remainingWriteRequirementsMet This argument, combined with
-     * {@link SpecRetryPolicy#SpecRetryPolicy(Set, boolean, boolean, ExplicitMaxRetries, ServerDeprioritization) retryRequirementsMaybeMet},
+     * {@link SpecRetryPolicy#SpecRetryPolicy(Set, boolean, Integer, boolean, ExplicitMaxRetries, ServerDeprioritization)},
      * specifies whether the write retry requirements are met.
      * <p>
      * Specifying {@code false}, or not calling this method at all, does not completely prevent retrying,

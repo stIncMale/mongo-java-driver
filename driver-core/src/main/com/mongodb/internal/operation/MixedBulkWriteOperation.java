@@ -80,6 +80,8 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
     private final List<? extends WriteRequest> writeRequests;
     private final boolean ordered;
     private final boolean retryWrites;
+    @Nullable
+    private final Integer maxAdaptiveRetriesSetting;
     private final WriteConcern writeConcern;
     private Boolean bypassDocumentValidation;
     private String commandName;
@@ -87,7 +89,9 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
     private BsonDocument variables;
 
     public MixedBulkWriteOperation(final MongoNamespace namespace, final List<? extends WriteRequest> writeRequests,
-            final boolean ordered, final WriteConcern writeConcern, final boolean retryWrites) {
+            final boolean ordered, final WriteConcern writeConcern,
+            final boolean retryWrites,
+            @Nullable final Integer maxAdaptiveRetriesSetting) {
         notNull("writeRequests", writeRequests);
         isTrueArgument("writeRequests is not an empty list", !writeRequests.isEmpty());
         this.commandName = notNull("commandName", writeRequests.get(0).getType().toString().toLowerCase(Locale.ROOT));
@@ -96,6 +100,7 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
         this.ordered = ordered;
         this.writeConcern = notNull("writeConcern", writeConcern);
         this.retryWrites = retryWrites;
+        this.maxAdaptiveRetriesSetting = maxAdaptiveRetriesSetting;
     }
 
     @Override
@@ -241,7 +246,9 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
         MutableValue<BulkWriteBatch> batch = new MutableValue<>(maybeBatch);
         MutableValue<SourceAndConnection> sourceAndConnection = new MutableValue<>(maybeSourceAndConnection);
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(WRITE), retryWrites, retryWrites, operationContext);
+                EnumSet.of(WRITE),
+                retryWrites, maxAdaptiveRetriesSetting,
+                retryWrites, operationContext);
         Supplier<BatchWithSourceAndConnection<SourceAndConnection>> retryingBatchExecutor = decorateWithRetries(
                 retryControl,
                 operationContext,
@@ -293,7 +300,9 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
             MutableValue<BulkWriteBatch> batch = new MutableValue<>(maybeBatch);
             MutableValue<AsyncSourceAndConnection> sourceAndConnection = new MutableValue<>(maybeSourceAndConnection);
             RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                    EnumSet.of(WRITE), retryWrites, retryWrites, operationContext);
+                    EnumSet.of(WRITE),
+                    retryWrites, maxAdaptiveRetriesSetting,
+                    retryWrites, operationContext);
             AsyncCallbackSupplier<BatchWithSourceAndConnection<AsyncSourceAndConnection>> retryingBatchExecutor = decorateWithRetriesAsync(
                     retryControl,
                     operationContext,

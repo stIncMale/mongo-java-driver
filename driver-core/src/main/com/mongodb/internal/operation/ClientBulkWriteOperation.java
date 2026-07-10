@@ -158,6 +158,8 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
     private final ConcreteClientBulkWriteOptions options;
     private final WriteConcern writeConcernSetting;
     private final boolean retryWritesSetting;
+    @Nullable
+    private final Integer maxAdaptiveRetriesSetting;
     private final CodecRegistry codecRegistry;
 
     /**
@@ -168,11 +170,13 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
             @Nullable final ClientBulkWriteOptions options,
             final WriteConcern writeConcernSetting,
             final boolean retryWritesSetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting,
             final CodecRegistry codecRegistry) {
         this.models = models;
         this.options = options == null ? EMPTY_OPTIONS : (ConcreteClientBulkWriteOptions) options;
         this.writeConcernSetting = writeConcernSetting;
         this.retryWritesSetting = retryWritesSetting;
+        this.maxAdaptiveRetriesSetting = maxAdaptiveRetriesSetting;
         this.codecRegistry = codecRegistry;
     }
 
@@ -282,7 +286,10 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
         List<? extends ClientNamespacedWriteModel> unexecutedModels = models.subList(batchStartModelIndex, models.size());
         assertFalse(unexecutedModels.isEmpty());
         SessionContext sessionContext = operationContext.getSessionContext();
-        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(EnumSet.of(WRITE), retryWritesSetting, retryWritesSetting, operationContext);
+        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
+                EnumSet.of(WRITE),
+                retryWritesSetting, maxAdaptiveRetriesSetting,
+                retryWritesSetting, operationContext);
         BatchEncoder batchEncoder = new BatchEncoder();
 
         Supplier<ExhaustiveClientBulkWriteCommandOkResponse> retryingBatchExecutor = decorateWithRetries(
@@ -335,7 +342,10 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
             List<? extends ClientNamespacedWriteModel> unexecutedModels = models.subList(batchStartModelIndex, models.size());
             assertFalse(unexecutedModels.isEmpty());
             SessionContext sessionContext = operationContext.getSessionContext();
-            RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(EnumSet.of(WRITE), retryWritesSetting, retryWritesSetting, operationContext);
+            RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
+                    EnumSet.of(WRITE),
+                    retryWritesSetting, maxAdaptiveRetriesSetting,
+                    retryWritesSetting, operationContext);
             BatchEncoder batchEncoder = new BatchEncoder();
 
             AsyncCallbackSupplier<ExhaustiveClientBulkWriteCommandOkResponse> retryingBatchExecutor = decorateWithRetriesAsync(

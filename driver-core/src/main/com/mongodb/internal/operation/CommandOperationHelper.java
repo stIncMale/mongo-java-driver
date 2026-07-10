@@ -72,11 +72,13 @@ public final class CommandOperationHelper {
     /* Read Binding Helpers */
 
     /**
-     * See {@link SpecRetryPolicy#SpecRetryPolicy(Set, boolean, boolean, ExplicitMaxRetries, OperationContext.ServerDeprioritization)}.
+     * See
+     * {@link SpecRetryPolicy#SpecRetryPolicy(Set, boolean, Integer, boolean, ExplicitMaxRetries, OperationContext.ServerDeprioritization)}.
      */
     static RetryControl<SpecRetryPolicy> createSpecRetryControl(
             final Set<SpecRetryPolicy.Descriptor> retryPolicyDescriptors,
             final boolean effectiveRetrySetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting,
             final boolean retryRequirementsMaybeMet,
             final OperationContext operationContext) {
         ExplicitMaxRetries explicitMaxRetries;
@@ -86,7 +88,12 @@ public final class CommandOperationHelper {
             explicitMaxRetries = NO_RETRIES;
         }
         return new RetryControl<>(new SpecRetryPolicy(
-                retryPolicyDescriptors, effectiveRetrySetting, retryRequirementsMaybeMet, explicitMaxRetries, operationContext.getServerDeprioritization()));
+                retryPolicyDescriptors,
+                effectiveRetrySetting,
+                maxAdaptiveRetriesSetting,
+                retryRequirementsMaybeMet,
+                explicitMaxRetries,
+                operationContext.getServerDeprioritization()));
     }
 
     private static final List<Integer> RETRYABLE_ERROR_CODES = asList(6, 7, 89, 91, 134, 189, 262, 9001, 13436, 13435, 11602, 11600, 10107);
