@@ -61,6 +61,7 @@ import static com.mongodb.internal.operation.CommandOperationHelper.transformWri
 import static com.mongodb.internal.operation.CommandOperationHelper.isWriteRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationHelper.isReadRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationHelper.isServerWriteRetryRequirementsMet;
+import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.OVERLOAD;
 import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.READ;
 import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.WRITE;
 import static com.mongodb.internal.operation.WriteConcernHelper.throwOnWriteConcernError;
@@ -198,7 +199,7 @@ final class AsyncOperationHelper {
             @Nullable final Integer maxAdaptiveRetriesSetting,
             final SingleResultCallback<T> callback) {
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(READ),
+                EnumSet.of(READ, OVERLOAD),
                 retryReadsSetting, maxAdaptiveRetriesSetting,
                 isReadRetryRequirementsMet(retryReadsSetting, operationContext), operationContext);
         binding.retain();
@@ -270,7 +271,7 @@ final class AsyncOperationHelper {
             binding.retain();
             MutableValue<BsonDocument> command = new MutableValue<>();
             RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                    EnumSet.of(WRITE),
+                    EnumSet.of(WRITE, OVERLOAD),
                     effectiveRetryWritesSetting, maxAdaptiveRetriesSetting,
                     effectiveRetryWritesSetting, operationContext);
             AsyncCallbackSupplier<R> retryingWrite = decorateWithRetriesAsync(retryControl, operationContext, supplierCallback -> {

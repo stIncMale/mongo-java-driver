@@ -66,6 +66,7 @@ import static com.mongodb.internal.operation.CommandOperationHelper.transformWri
 import static com.mongodb.internal.operation.CommandOperationHelper.validateAndGetEffectiveWriteConcern;
 import static com.mongodb.internal.operation.OperationHelper.isServerWriteRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationHelper.validateWriteRequests;
+import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.OVERLOAD;
 import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.WRITE;
 import static com.mongodb.internal.operation.SyncOperationHelper.decorateWithRetries;
 import static com.mongodb.internal.operation.SyncOperationHelper.withSourceAndConnection;
@@ -246,7 +247,7 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
         MutableValue<BulkWriteBatch> batch = new MutableValue<>(maybeBatch);
         MutableValue<SourceAndConnection> sourceAndConnection = new MutableValue<>(maybeSourceAndConnection);
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(WRITE),
+                EnumSet.of(WRITE, OVERLOAD),
                 retryWrites, maxAdaptiveRetriesSetting,
                 retryWrites, operationContext);
         Supplier<BatchWithSourceAndConnection<SourceAndConnection>> retryingBatchExecutor = decorateWithRetries(
@@ -300,7 +301,7 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
             MutableValue<BulkWriteBatch> batch = new MutableValue<>(maybeBatch);
             MutableValue<AsyncSourceAndConnection> sourceAndConnection = new MutableValue<>(maybeSourceAndConnection);
             RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                    EnumSet.of(WRITE),
+                    EnumSet.of(WRITE, OVERLOAD),
                     retryWrites, maxAdaptiveRetriesSetting,
                     retryWrites, operationContext);
             AsyncCallbackSupplier<BatchWithSourceAndConnection<AsyncSourceAndConnection>> retryingBatchExecutor = decorateWithRetriesAsync(

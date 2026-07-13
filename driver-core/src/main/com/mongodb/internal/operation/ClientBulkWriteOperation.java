@@ -131,6 +131,7 @@ import static com.mongodb.internal.operation.CommandOperationHelper.createSpecRe
 import static com.mongodb.internal.operation.CommandOperationHelper.transformWriteException;
 import static com.mongodb.internal.operation.OperationHelper.isNonCommandWriteRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationHelper.isServerWriteRetryRequirementsMet;
+import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.OVERLOAD;
 import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.WRITE;
 import static com.mongodb.internal.operation.SyncOperationHelper.cursorDocumentToBatchCursor;
 import static com.mongodb.internal.operation.SyncOperationHelper.decorateWithRetries;
@@ -287,7 +288,7 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
         assertFalse(unexecutedModels.isEmpty());
         SessionContext sessionContext = operationContext.getSessionContext();
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(WRITE),
+                EnumSet.of(WRITE, OVERLOAD),
                 retryWritesSetting, maxAdaptiveRetriesSetting,
                 retryWritesSetting, operationContext);
         BatchEncoder batchEncoder = new BatchEncoder();
@@ -343,7 +344,7 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
             assertFalse(unexecutedModels.isEmpty());
             SessionContext sessionContext = operationContext.getSessionContext();
             RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                    EnumSet.of(WRITE),
+                    EnumSet.of(WRITE, OVERLOAD),
                     retryWritesSetting, maxAdaptiveRetriesSetting,
                     retryWritesSetting, operationContext);
             BatchEncoder batchEncoder = new BatchEncoder();

@@ -54,6 +54,7 @@ import static com.mongodb.internal.operation.OperationHelper.LOGGER;
 import static com.mongodb.internal.operation.OperationHelper.applyTimeoutModeToOperationContext;
 import static com.mongodb.internal.operation.OperationHelper.isReadRetryRequirementsMet;
 import static com.mongodb.internal.operation.SingleBatchCursor.createEmptySingleBatchCursor;
+import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.OVERLOAD;
 import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.READ;
 import static com.mongodb.internal.operation.SyncOperationHelper.CommandReadTransformer;
 import static com.mongodb.internal.operation.SyncOperationHelper.createReadCommandAndExecute;
@@ -141,7 +142,7 @@ public class ListIndexesOperation<T> implements ReadOperationCursor<T> {
         OperationContext listIndexesOperationContext = applyTimeoutModeToOperationContext(timeoutMode, operationContext);
 
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(READ),
+                EnumSet.of(READ, OVERLOAD),
                 retryReads, maxAdaptiveRetriesSetting,
                 isReadRetryRequirementsMet(retryReads, listIndexesOperationContext), listIndexesOperationContext);
         Supplier<BatchCursor<T>> read = decorateWithRetries(retryControl, listIndexesOperationContext, () ->
@@ -163,7 +164,7 @@ public class ListIndexesOperation<T> implements ReadOperationCursor<T> {
         OperationContext listIndexesOperationContext = applyTimeoutModeToOperationContext(timeoutMode, operationContext);
 
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(READ),
+                EnumSet.of(READ, OVERLOAD),
                 retryReads, maxAdaptiveRetriesSetting,
                 isReadRetryRequirementsMet(retryReads, listIndexesOperationContext), listIndexesOperationContext);
         binding.retain();
