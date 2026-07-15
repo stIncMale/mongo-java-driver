@@ -29,6 +29,7 @@ import com.mongodb.connection.ConnectionDescription;
 import com.mongodb.connection.ServerDescription;
 import com.mongodb.internal.async.function.RetryControl;
 import com.mongodb.internal.connection.OperationContext;
+import com.mongodb.internal.operation.SpecRetryPolicy.DescriptorSet;
 import com.mongodb.internal.operation.SpecRetryPolicy.ExplicitMaxRetries;
 import com.mongodb.internal.session.SessionContext;
 import com.mongodb.lang.Nullable;
@@ -36,11 +37,9 @@ import org.bson.BsonDocument;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static com.mongodb.internal.operation.SpecRetryPolicy.ExplicitMaxRetries.RETRIES_LIMITED_BY_DESCRIPTORS;
 import static com.mongodb.internal.operation.SpecRetryPolicy.ExplicitMaxRetries.NO_RETRIES_LIMIT;
-import static com.mongodb.internal.operation.SpecRetryPolicy.ExplicitMaxRetries.NO_RETRIES;
 import static java.util.Arrays.asList;
 
 @SuppressWarnings("overloads")
@@ -77,27 +76,14 @@ public final class CommandOperationHelper {
 
     /* Read Binding Helpers */
 
-    /**
-     * See
-     * {@link SpecRetryPolicy#SpecRetryPolicy(Set, boolean, Integer, boolean, ExplicitMaxRetries, OperationContext.ServerDeprioritization)}.
-     */
     static RetryControl<SpecRetryPolicy> createSpecRetryControl(
-            final Set<SpecRetryPolicy.Descriptor> retryPolicyDescriptors,
-            final boolean effectiveRetrySetting,
-            @Nullable final Integer maxAdaptiveRetriesSetting,
-            final boolean retryRequirementsMaybeMet,
+            final DescriptorSet retryPolicyDescriptors,
             final OperationContext operationContext) {
-        ExplicitMaxRetries explicitMaxRetries;
-        if (effectiveRetrySetting && retryRequirementsMaybeMet) {
-            explicitMaxRetries = operationContext.getTimeoutContext().hasTimeoutMS() ? NO_RETRIES_LIMIT : RETRIES_LIMITED_BY_DESCRIPTORS;
-        } else {
-            explicitMaxRetries = NO_RETRIES;
-        }
+        ExplicitMaxRetries explicitMaxRetries = operationContext.getTimeoutContext().hasTimeoutMS()
+                ? NO_RETRIES_LIMIT
+                : RETRIES_LIMITED_BY_DESCRIPTORS;
         return new RetryControl<>(new SpecRetryPolicy(
                 retryPolicyDescriptors,
-                effectiveRetrySetting,
-                maxAdaptiveRetriesSetting,
-                retryRequirementsMaybeMet,
                 explicitMaxRetries,
                 operationContext.getServerDeprioritization()));
     }

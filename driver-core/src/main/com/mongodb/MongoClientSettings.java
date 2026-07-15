@@ -545,7 +545,8 @@ public final class MongoClientSettings {
          *                 The attempts failed due to retryable overload errors are retried only if
          *                 {@link #retryWrites(boolean)} is {@code true} and {@link #retryReads(boolean)} is {@code true}.
          *                 <p>
-         *                 The command kind is unknown when a command is executed via the {@code MongoDatabase.runCommand} operation.
+         *                 The command kind is unknown if and only if a command is executed via
+         *                 the {@code MongoDatabase.runCommand} operation.
          *             </td>
          *         </tr>
          *     </tbody>

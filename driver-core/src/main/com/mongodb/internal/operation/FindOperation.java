@@ -31,6 +31,7 @@ import com.mongodb.internal.async.function.RetryControl;
 import com.mongodb.internal.binding.AsyncReadBinding;
 import com.mongodb.internal.binding.ReadBinding;
 import com.mongodb.internal.connection.OperationContext;
+import com.mongodb.internal.operation.SpecRetryPolicy.DescriptorSet;
 import com.mongodb.lang.Nullable;
 import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
@@ -39,7 +40,6 @@ import org.bson.BsonString;
 import org.bson.BsonValue;
 import org.bson.codecs.Decoder;
 
-import java.util.EnumSet;
 import java.util.function.Supplier;
 
 import static com.mongodb.assertions.Assertions.notNull;
@@ -55,11 +55,8 @@ import static com.mongodb.internal.operation.DocumentHelper.putIfNotNull;
 import static com.mongodb.internal.operation.DocumentHelper.putIfNotNullOrEmpty;
 import static com.mongodb.internal.operation.ExplainHelper.asExplainCommand;
 import static com.mongodb.internal.operation.OperationHelper.LOGGER;
-import static com.mongodb.internal.operation.OperationHelper.isReadRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationReadConcernHelper.appendReadConcernToCommand;
 import static com.mongodb.internal.operation.ServerVersionHelper.UNKNOWN_WIRE_VERSION;
-import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.OVERLOAD;
-import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.READ;
 import static com.mongodb.internal.operation.SyncOperationHelper.CommandReadTransformer;
 import static com.mongodb.internal.operation.SyncOperationHelper.createReadCommandAndExecute;
 import static com.mongodb.internal.operation.SyncOperationHelper.decorateWithRetries;
@@ -309,9 +306,8 @@ public class FindOperation<T> implements ReadOperationExplainable<T> {
 
         OperationContext findOperationContext = getFindOperationContext(operationContext);
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(READ, OVERLOAD),
-                retryReads, maxAdaptiveRetriesSetting,
-                isReadRetryRequirementsMet(retryReads, findOperationContext), findOperationContext);
+                new DescriptorSet(retryReads).includeRead(findOperationContext).includeOverload(maxAdaptiveRetriesSetting),
+                findOperationContext);
         Supplier<BatchCursor<T>> read = decorateWithRetries(retryControl, findOperationContext, () ->
                 withSourceAndConnection(binding::getReadConnectionSource, false, findOperationContext,
                         (source, connection, commandOperationContext) -> {
@@ -338,9 +334,8 @@ public class FindOperation<T> implements ReadOperationExplainable<T> {
 
         OperationContext findOperationContext = getFindOperationContext(operationContext);
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(READ, OVERLOAD),
-                retryReads, maxAdaptiveRetriesSetting,
-                isReadRetryRequirementsMet(retryReads, findOperationContext), findOperationContext);
+                new DescriptorSet(retryReads).includeRead(findOperationContext).includeOverload(maxAdaptiveRetriesSetting),
+                findOperationContext);
         binding.retain();
         AsyncCallbackSupplier<AsyncBatchCursor<T>> asyncRead = decorateWithRetriesAsync(
                 retryControl, operationContext, (AsyncCallbackSupplier<AsyncBatchCursor<T>>) funcCallback ->

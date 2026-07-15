@@ -80,6 +80,7 @@ import com.mongodb.internal.connection.DualMessageSequences;
 import com.mongodb.internal.connection.IdHoldingBsonWriter;
 import com.mongodb.internal.connection.MongoWriteConcernWithResponseException;
 import com.mongodb.internal.connection.OperationContext;
+import com.mongodb.internal.operation.SpecRetryPolicy.DescriptorSet;
 import com.mongodb.internal.session.SessionContext;
 import com.mongodb.internal.validator.NoOpFieldNameValidator;
 import com.mongodb.internal.validator.ReplacingDocumentFieldNameValidator;
@@ -101,7 +102,6 @@ import org.bson.codecs.configuration.CodecRegistry;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -131,8 +131,6 @@ import static com.mongodb.internal.operation.CommandOperationHelper.createSpecRe
 import static com.mongodb.internal.operation.CommandOperationHelper.transformWriteException;
 import static com.mongodb.internal.operation.OperationHelper.isNonCommandWriteRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationHelper.isServerWriteRetryRequirementsMet;
-import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.OVERLOAD;
-import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.WRITE;
 import static com.mongodb.internal.operation.SyncOperationHelper.cursorDocumentToBatchCursor;
 import static com.mongodb.internal.operation.SyncOperationHelper.decorateWithRetries;
 import static com.mongodb.internal.operation.SyncOperationHelper.withSourceAndConnection;
@@ -288,9 +286,8 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
         assertFalse(unexecutedModels.isEmpty());
         SessionContext sessionContext = operationContext.getSessionContext();
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(WRITE, OVERLOAD),
-                retryWritesSetting, maxAdaptiveRetriesSetting,
-                retryWritesSetting, operationContext);
+                new DescriptorSet(retryWritesSetting).includeWrite().includeOverload(maxAdaptiveRetriesSetting),
+                operationContext);
         BatchEncoder batchEncoder = new BatchEncoder();
 
         Supplier<ExhaustiveClientBulkWriteCommandOkResponse> retryingBatchExecutor = decorateWithRetries(
@@ -344,9 +341,8 @@ public final class ClientBulkWriteOperation implements WriteOperation<ClientBulk
             assertFalse(unexecutedModels.isEmpty());
             SessionContext sessionContext = operationContext.getSessionContext();
             RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                    EnumSet.of(WRITE, OVERLOAD),
-                    retryWritesSetting, maxAdaptiveRetriesSetting,
-                    retryWritesSetting, operationContext);
+                    new DescriptorSet(retryWritesSetting).includeWrite().includeOverload(maxAdaptiveRetriesSetting),
+                    operationContext);
             BatchEncoder batchEncoder = new BatchEncoder();
 
             AsyncCallbackSupplier<ExhaustiveClientBulkWriteCommandOkResponse> retryingBatchExecutor = decorateWithRetriesAsync(
