@@ -66,13 +66,17 @@ final class ClientSessionImpl extends BaseClientSessionImpl implements ClientSes
     private boolean commitInProgress;
     private TransactionOptions transactionOptions;
     private final TracingManager tracingManager;
+    @Nullable
+    private final Integer maxAdaptiveRetriesSetting;
     private TransactionSpan transactionSpan = null;
 
+
     ClientSessionImpl(final ServerSessionPool serverSessionPool, final Object originator, final ClientSessionOptions options,
-            final OperationExecutor operationExecutor, final TracingManager tracingManager) {
+            final OperationExecutor operationExecutor, final TracingManager tracingManager, @Nullable final Integer maxAdaptiveRetriesSetting) {
         super(serverSessionPool, originator, options);
         this.operationExecutor = operationExecutor;
         this.tracingManager = tracingManager;
+        this.maxAdaptiveRetriesSetting = maxAdaptiveRetriesSetting;
     }
 
     @Override
@@ -147,7 +151,7 @@ final class ClientSessionImpl extends BaseClientSessionImpl implements ClientSes
                 TimeoutContext timeoutContext = getTimeoutContext();
                 WriteConcern writeConcern = assertNotNull(getWriteConcern(timeoutContext));
                 operationExecutor
-                        .execute(new AbortTransactionOperation(writeConcern)
+                        .execute(new AbortTransactionOperation(writeConcern, maxAdaptiveRetriesSetting)
                                 .recoveryToken(getRecoveryToken()), readConcern, this);
             }
         } catch (RuntimeException e) {
@@ -229,7 +233,7 @@ final class ClientSessionImpl extends BaseClientSessionImpl implements ClientSes
                 TimeoutContext timeoutContext = getTimeoutContext();
                 WriteConcern writeConcern = assertNotNull(getWriteConcern(timeoutContext));
                 operationExecutor
-                        .execute(new CommitTransactionOperation(writeConcern,
+                        .execute(new CommitTransactionOperation(writeConcern, maxAdaptiveRetriesSetting,
                                 transactionState == TransactionState.COMMITTED)
                                 .recoveryToken(getRecoveryToken()), readConcern, this);
             }
@@ -320,7 +324,6 @@ final class ClientSessionImpl extends BaseClientSessionImpl implements ClientSes
                                 if (withTransactionTimeoutExpired.getAsBoolean()) {
                                     throw wrapInMongoTimeoutException(mongoException, timeoutMsConfigured);
                                 }
-                                applyMajorityWriteConcernToTransactionOptions();
                                 continue;
                             } else if (mongoException.hasErrorLabel(TRANSIENT_TRANSACTION_ERROR_LABEL)) {
                                 if (transactionSpan != null) {
@@ -355,23 +358,6 @@ final class ClientSessionImpl extends BaseClientSessionImpl implements ClientSes
         } finally {
             clearTransactionContext();
             super.close();
-        }
-    }
-
-    // Apply majority write concern if the commit is to be retried.
-    private void applyMajorityWriteConcernToTransactionOptions() {
-        if (transactionOptions != null) {
-            TimeoutContext timeoutContext = getTimeoutContext();
-            WriteConcern writeConcern = getWriteConcern(timeoutContext);
-            if (writeConcern != null) {
-                transactionOptions = TransactionOptions.merge(TransactionOptions.builder()
-                        .writeConcern(writeConcern.withW("majority")).build(), transactionOptions);
-            } else {
-                transactionOptions = TransactionOptions.merge(TransactionOptions.builder()
-                        .writeConcern(WriteConcern.MAJORITY).build(), transactionOptions);
-            }
-        } else {
-            transactionOptions = TransactionOptions.builder().writeConcern(WriteConcern.MAJORITY).build();
         }
     }
 

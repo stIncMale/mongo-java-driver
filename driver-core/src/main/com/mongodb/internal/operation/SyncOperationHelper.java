@@ -31,6 +31,7 @@ import com.mongodb.internal.binding.ReferenceCounted;
 import com.mongodb.internal.binding.WriteBinding;
 import com.mongodb.internal.connection.Connection;
 import com.mongodb.internal.connection.OperationContext;
+import com.mongodb.internal.operation.SpecRetryPolicy.DescriptorSet;
 import com.mongodb.internal.session.SessionContext;
 import com.mongodb.internal.validator.NoOpFieldNameValidator;
 import com.mongodb.lang.Nullable;
@@ -40,7 +41,6 @@ import org.bson.FieldNameValidator;
 import org.bson.codecs.BsonDocumentCodec;
 import org.bson.codecs.Decoder;
 
-import java.util.EnumSet;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -54,10 +54,7 @@ import static com.mongodb.internal.operation.CommandOperationHelper.createSpecRe
 import static com.mongodb.internal.operation.CommandOperationHelper.isWriteRetryRequirementsMet;
 import static com.mongodb.internal.operation.CommandOperationHelper.transformWriteException;
 import static com.mongodb.internal.operation.OperationHelper.ResourceSupplierInternalException;
-import static com.mongodb.internal.operation.OperationHelper.isReadRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationHelper.isServerWriteRetryRequirementsMet;
-import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.READ;
-import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.WRITE;
 import static com.mongodb.internal.operation.WriteConcernHelper.throwOnWriteConcernError;
 
 final class SyncOperationHelper {
@@ -191,9 +188,10 @@ final class SyncOperationHelper {
             final CommandCreator commandCreator,
             final Decoder<D> decoder,
             final CommandReadTransformer<D, T> transformer,
-            final boolean retryReadsSetting) {
+            final boolean retryReadsSetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting) {
         return executeRetryableRead(operationContext, binding::getReadConnectionSource, database, commandCreator,
-                                    decoder, transformer, retryReadsSetting);
+                                    decoder, transformer, retryReadsSetting, maxAdaptiveRetriesSetting);
     }
 
     static <D, T> T executeRetryableRead(
@@ -203,8 +201,12 @@ final class SyncOperationHelper {
             final CommandCreator commandCreator,
             final Decoder<D> decoder,
             final CommandReadTransformer<D, T> transformer,
-            final boolean retryReadsSetting) {
-        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(EnumSet.of(READ), retryReadsSetting, isReadRetryRequirementsMet(retryReadsSetting, operationContext), operationContext);
+            final boolean retryReadsSetting,
+            @Nullable
+            final Integer maxAdaptiveRetriesSetting) {
+        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
+                new DescriptorSet(retryReadsSetting).includeRead(operationContext).includeOverload(maxAdaptiveRetriesSetting),
+                operationContext);
 
         Supplier<T> read = decorateWithRetries(retryControl, operationContext, () ->
                 withSourceAndConnection(readConnectionSourceSupplier, false, operationContext, (source, connection, operationContextWithMinRtt) -> {
@@ -264,9 +266,12 @@ final class SyncOperationHelper {
             final CommandCreator commandCreator,
             final CommandWriteTransformer<T, R> transformer,
             final com.mongodb.Function<BsonDocument, BsonDocument> retryCommandModifier,
-            final boolean effectiveRetryWritesSetting) {
+            final boolean effectiveRetryWritesSetting,
+            @Nullable final Integer maxAdaptiveRetriesSetting) {
         MutableValue<BsonDocument> command = new MutableValue<>();
-        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(EnumSet.of(WRITE), effectiveRetryWritesSetting, effectiveRetryWritesSetting, operationContext);
+        RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
+                new DescriptorSet(effectiveRetryWritesSetting).includeWrite().includeOverload(maxAdaptiveRetriesSetting),
+                operationContext);
         Supplier<R> retryingWrite = decorateWithRetries(retryControl, operationContext, () -> {
             boolean firstAttempt = retryControl.isFirstAttempt();
             SessionContext sessionContext = operationContext.getSessionContext();

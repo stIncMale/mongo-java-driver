@@ -32,6 +32,7 @@ import com.mongodb.connection.SocketSettings;
 import com.mongodb.connection.SslSettings;
 import com.mongodb.connection.TransportSettings;
 import com.mongodb.event.CommandListener;
+import com.mongodb.internal.operation.CommandOperationHelper;
 import com.mongodb.lang.Nullable;
 import com.mongodb.observability.ObservabilitySettings;
 import com.mongodb.spi.dns.DnsClient;
@@ -503,9 +504,11 @@ public final class MongoClientSettings {
          * the {@value MongoException#SYSTEM_OVERLOADED_ERROR_LABEL} and {@value MongoException#RETRYABLE_ERROR_LABEL} labels.
          * Such errors are referred to as retryable overload errors.
          * <p>
-         * Default is {@code null}, implies the value 2 and the above retry behavior. The implied value and behavior may change in
+         * Default is {@code null}, implies the value {@value CommandOperationHelper#DEFAULT_MAX_ADAPTIVE_RETRIES} and the above retry behavior.
+         * The implied value and behavior may change in
          * the future in a <a href="https://semver.org/spec/v2.0.0.html#summary">minor version</a>.
-         * This means, there is no guarantee that not setting a value is equivalent to setting the value 2.
+         * This means, there is no guarantee that not setting a value is equivalent to setting the value
+         * {@value CommandOperationHelper#DEFAULT_MAX_ADAPTIVE_RETRIES}.
          * The value 0 results in not retrying the attempts failed due to retryable overload errors.
          *
          * <table>
@@ -542,7 +545,8 @@ public final class MongoClientSettings {
          *                 The attempts failed due to retryable overload errors are retried only if
          *                 {@link #retryWrites(boolean)} is {@code true} and {@link #retryReads(boolean)} is {@code true}.
          *                 <p>
-         *                 The command kind is unknown when a command is executed via the {@code MongoDatabase.runCommand} operation.
+         *                 The command kind is unknown if and only if a command is executed via
+         *                 the {@code MongoDatabase.runCommand} operation.
          *             </td>
          *         </tr>
          *     </tbody>
@@ -772,13 +776,10 @@ public final class MongoClientSettings {
 
         /**
          * Sets the context provider
-         *
          * <p>
          * When used with the synchronous driver, this must be an instance of {@code com.mongodb.client.SynchronousContextProvider}.
          * When used with the reactive streams driver, this must be an instance of
          * {@code com.mongodb.reactivestreams.client.ReactiveContextProvider}.
-         *
-         * </p>
          *
          * @param contextProvider the context provider
          * @return this
@@ -963,7 +964,6 @@ public final class MongoClientSettings {
      */
     @Beta(Reason.CLIENT)
     @Nullable
-    // TODO-BACKPRESSURE Valentin Use the `maxAdaptiveRetries` setting when retrying.
     public Integer getMaxAdaptiveRetries() {
         return maxAdaptiveRetries;
     }
