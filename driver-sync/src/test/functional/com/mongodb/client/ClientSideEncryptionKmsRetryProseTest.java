@@ -19,10 +19,12 @@ package com.mongodb.client;
 import com.mongodb.ClientEncryptionSettings;
 import com.mongodb.client.vault.ClientEncryption;
 import com.mongodb.client.vault.ClientEncryptions;
+import com.mongodb.lang.NonNull;
 
 public class ClientSideEncryptionKmsRetryProseTest extends AbstractClientSideEncryptionKmsRetryProseTest {
     @Override
-    public ClientEncryption getClientEncryption(final ClientEncryptionSettings settings) {
+    @NonNull
+    protected ClientEncryption getClientEncryption(final ClientEncryptionSettings settings) {
         return ClientEncryptions.create(settings);
     }
 }
