@@ -45,7 +45,6 @@ import org.bson.BsonDocument;
 import org.bson.BsonString;
 import org.bson.BsonValue;
 
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -66,7 +65,6 @@ import static com.mongodb.internal.operation.CommandOperationHelper.transformWri
 import static com.mongodb.internal.operation.CommandOperationHelper.validateAndGetEffectiveWriteConcern;
 import static com.mongodb.internal.operation.OperationHelper.isServerWriteRetryRequirementsMet;
 import static com.mongodb.internal.operation.OperationHelper.validateWriteRequests;
-import static com.mongodb.internal.operation.SpecRetryPolicy.Descriptor.WRITE;
 import static com.mongodb.internal.operation.SyncOperationHelper.decorateWithRetries;
 import static com.mongodb.internal.operation.SyncOperationHelper.withSourceAndConnection;
 
@@ -163,14 +161,13 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
             final OperationContext operationContext,
             final SingleResultCallback<BulkWriteResult> callback) {
         beginAsync().<BulkWriteResult>thenSupply(c -> {
-            binding.retain();
             WriteConcern effectiveWriteConcern = validateAndGetEffectiveWriteConcern(writeConcern, operationContext.getSessionContext());
             beginAsync().<BulkWriteResult>thenSupply(executeAllBatchesCallback -> {
                 executeAllBatchesAsync(effectiveWriteConcern, binding, operationContext, executeAllBatchesCallback);
             }).onErrorIf(e -> e instanceof MongoException, (e, onErrorCallback) -> {
                 throw transformWriteException((MongoException) e);
             }).finish(c);
-        }).thenAlwaysRunAndFinish(binding::release, callback);
+        }).finish(callback);
     }
 
     private BulkWriteResult executeAllBatches(
@@ -241,7 +238,8 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
         MutableValue<BulkWriteBatch> batch = new MutableValue<>(maybeBatch);
         MutableValue<SourceAndConnection> sourceAndConnection = new MutableValue<>(maybeSourceAndConnection);
         RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                EnumSet.of(WRITE), retryWrites, retryWrites, operationContext);
+                new SpecRetryPolicy.IndividualPolicies(retryWrites).includeWrite(),
+                operationContext);
         Supplier<BatchWithSourceAndConnection<SourceAndConnection>> retryingBatchExecutor = decorateWithRetries(
                 retryControl,
                 operationContext,
@@ -293,7 +291,8 @@ public class MixedBulkWriteOperation implements WriteOperation<BulkWriteResult> 
             MutableValue<BulkWriteBatch> batch = new MutableValue<>(maybeBatch);
             MutableValue<AsyncSourceAndConnection> sourceAndConnection = new MutableValue<>(maybeSourceAndConnection);
             RetryControl<SpecRetryPolicy> retryControl = createSpecRetryControl(
-                    EnumSet.of(WRITE), retryWrites, retryWrites, operationContext);
+                    new SpecRetryPolicy.IndividualPolicies(retryWrites).includeWrite(),
+                    operationContext);
             AsyncCallbackSupplier<BatchWithSourceAndConnection<AsyncSourceAndConnection>> retryingBatchExecutor = decorateWithRetriesAsync(
                     retryControl,
                     operationContext,
