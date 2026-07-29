@@ -145,13 +145,10 @@ final class SpecRetryPolicy implements RetryPolicy {
     }
 
     private static Throwable stripResourceSupplierInternalException(final Throwable maybeInternal) {
-        Throwable external;
         if (maybeInternal instanceof OperationHelper.ResourceSupplierInternalException) {
-            external = maybeInternal.getCause();
-        } else {
-            external = maybeInternal;
+            return maybeInternal.getCause();
         }
-        return external;
+        return maybeInternal;
     }
 
     /**
