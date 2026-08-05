@@ -18,6 +18,7 @@ package com.mongodb.internal.session;
 
 import com.mongodb.ClientSessionOptions;
 import com.mongodb.MongoClientException;
+import com.mongodb.MongoException;
 import com.mongodb.ServerAddress;
 import com.mongodb.TransactionOptions;
 import com.mongodb.WriteConcern;
@@ -33,12 +34,15 @@ import org.bson.BsonTimestamp;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.mongodb.assertions.Assertions.assertNull;
 import static com.mongodb.assertions.Assertions.assertTrue;
+import static com.mongodb.assertions.Assertions.fail;
 import static com.mongodb.assertions.Assertions.isTrue;
+import static java.lang.Boolean.TRUE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
- * <p>This class is not part of the public API and may be removed or changed at any time</p>
+ * This class is not part of the public API and may be removed or changed at any time.
  */
 public class BaseClientSessionImpl implements ClientSession {
     private static final String CLUSTER_TIME_KEY = "clusterTime";
@@ -47,6 +51,7 @@ public class BaseClientSessionImpl implements ClientSession {
     private ServerSession serverSession;
     private final Object originator;
     private final ClientSessionOptions options;
+    private final DefaultOverloadRetryPolicyState overloadRetryPolicyState = new DefaultOverloadRetryPolicyState();
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private BsonDocument clusterTime;
     private BsonTimestamp operationTime;
@@ -239,6 +244,10 @@ public class BaseClientSessionImpl implements ClientSession {
                 .withTimeout(timeoutMS, MILLISECONDS);
     }
 
+    public OverloadRetryPolicyState getOverloadRetryPolicyState() {
+        return overloadRetryPolicyState;
+    }
+
     protected enum TransactionState {
         NONE,
         /**
@@ -248,5 +257,145 @@ public class BaseClientSessionImpl implements ClientSession {
         IN,
         COMMITTED,
         ABORTED
+    }
+
+    /**
+     * The {@link ClientSession}-scoped state of the overload retry policy.
+     * <p>
+     * This class is not part of the public API and may be removed or changed at any time.
+     */
+    public interface OverloadRetryPolicyState {
+        OverloadRetryPolicyState NO_OP = new NoOpOverloadRetryPolicyState();
+
+        void openCommandExecutionScope();
+
+        @Nullable
+        CommandExecutionScoped getCommandExecutionScoped();
+
+        void closeCommandExecutionScope();
+
+        /**
+         * A part of {@link DefaultOverloadRetryPolicyState} restricted to the execution of a command
+         * (a command execution may involve multiple execution attempts).
+         * <p>
+         * This class is not part of the public API and may be removed or changed at any time.
+         */
+        interface CommandExecutionScoped {
+            /**
+             * @return See {@link SessionContext#notifyMessageSent()}.
+             */
+            boolean notifyMessageSent(boolean firstMessageInTransaction);
+
+            void onAnyAttemptFailure(boolean retryableOverloadError);
+        }
+    }
+
+    private static final class DefaultOverloadRetryPolicyState implements OverloadRetryPolicyState {
+        @Nullable
+        private DefaultCommandExecutionScoped commandExecutionScoped;
+
+        DefaultOverloadRetryPolicyState() {
+            commandExecutionScoped = null;
+        }
+
+        @Override
+        public void openCommandExecutionScope() {
+            assertNull(commandExecutionScoped);
+            commandExecutionScoped = new DefaultCommandExecutionScoped();
+        }
+
+        @Override
+        @Nullable
+        public CommandExecutionScoped getCommandExecutionScoped() {
+            return commandExecutionScoped;
+        }
+
+        @Override
+        public void closeCommandExecutionScope() {
+            commandExecutionScoped = null;
+        }
+
+        @Override
+        public String toString() {
+            return "DefaultOverloadRetryPolicyState{"
+                    + "commandExecutionScoped=" + commandExecutionScoped
+                    + '}';
+        }
+
+        private static final class DefaultCommandExecutionScoped implements CommandExecutionScoped {
+            @Nullable
+            private Boolean tryingToStartTransaction;
+            /**
+             * @see MongoException#RETRYABLE_ERROR_LABEL
+             * @see MongoException#SYSTEM_OVERLOADED_ERROR_LABEL
+             */
+            private boolean observedNoneOrOnlyRetryableOverloadErrors;
+
+            DefaultCommandExecutionScoped() {
+                tryingToStartTransaction = null;
+                observedNoneOrOnlyRetryableOverloadErrors = true;
+            }
+
+            /**
+             * @return See {@link SessionContext#notifyMessageSent()}.
+             */
+            @Override
+            public boolean notifyMessageSent(final boolean firstMessageInTransaction) {
+                if (firstMessageInTransaction) {
+                    assertNull(tryingToStartTransaction);
+                    tryingToStartTransaction = true;
+                    return true;
+                } else {
+                    return TRUE.equals(tryingToStartTransaction) && observedNoneOrOnlyRetryableOverloadErrors;
+                }
+            }
+
+            @Override
+            public void onAnyAttemptFailure(final boolean retryableOverloadError) {
+                observedNoneOrOnlyRetryableOverloadErrors &= retryableOverloadError;
+            }
+
+            @Override
+            public String toString() {
+                return "DefaultCommandExecutionScoped{"
+                        + "tryingToStartTransaction=" + tryingToStartTransaction
+                        + ", observedNoneOrOnlyRetryableOverloadErrors=" + observedNoneOrOnlyRetryableOverloadErrors
+                        + '}';
+            }
+        }
+    }
+
+    private static final class NoOpOverloadRetryPolicyState implements OverloadRetryPolicyState {
+        NoOpOverloadRetryPolicyState() {
+        }
+
+        @Override
+        public void openCommandExecutionScope() {
+        }
+
+        @Override
+        public CommandExecutionScoped getCommandExecutionScoped() {
+            return NoOpCommandExecutionScoped.INSTANCE;
+        }
+
+        @Override
+        public void closeCommandExecutionScope() {
+        }
+
+        private static final class NoOpCommandExecutionScoped implements CommandExecutionScoped {
+            static final NoOpCommandExecutionScoped INSTANCE = new NoOpCommandExecutionScoped();
+
+            private NoOpCommandExecutionScoped() {
+            }
+
+            @Override
+            public boolean notifyMessageSent(final boolean firstMessageInTransaction) {
+                throw fail();
+            }
+
+            @Override
+            public void onAnyAttemptFailure(final boolean retryableOverloadError) {
+            }
+        }
     }
 }
