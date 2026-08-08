@@ -17,6 +17,7 @@
 package com.mongodb.internal.binding;
 
 import com.mongodb.ReadConcern;
+import com.mongodb.internal.session.BaseClientSessionImpl.OverloadRetryPolicyState;
 import com.mongodb.internal.session.SessionContext;
 import com.mongodb.lang.Nullable;
 import org.bson.BsonDocument;
@@ -27,6 +28,8 @@ import org.bson.codecs.EncoderContext;
 import org.bson.codecs.UuidCodec;
 
 import java.util.UUID;
+
+import static com.mongodb.assertions.Assertions.fail;
 
 public class SimpleSessionContext implements SessionContext {
     private final BsonDocument sessionId;
@@ -136,6 +139,11 @@ public class SimpleSessionContext implements SessionContext {
     @Override
     public boolean isSessionMarkedDirty() {
         return false;
+    }
+
+    @Override
+    public OverloadRetryPolicyState getOverloadRetryPolicyState() {
+        throw fail();
     }
 
     private static BsonDocument createNewServerSessionIdentifier() {

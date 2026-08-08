@@ -244,6 +244,7 @@ public class BaseClientSessionImpl implements ClientSession {
                 .withTimeout(timeoutMS, MILLISECONDS);
     }
 
+    @Override
     public OverloadRetryPolicyState getOverloadRetryPolicyState() {
         return overloadRetryPolicyState;
     }
